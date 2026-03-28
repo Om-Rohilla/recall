@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/spf13/cobra"
@@ -99,12 +100,7 @@ func executeSearch(args []string) error {
 	}
 
 	if len(results) == 0 {
-		fmt.Println("No results found.")
-		fmt.Println()
-		fmt.Println("💡 Tips:")
-		fmt.Println("   - Try different keywords")
-		fmt.Println("   - Import your history: recall import-history")
-		fmt.Println("   - Use broader terms")
+		fmt.Println(ui.RenderNoResults(query))
 		os.Exit(2)
 	}
 
@@ -114,35 +110,7 @@ func executeSearch(args []string) error {
 		return enc.Encode(results)
 	}
 
-	// Render result cards (will use ui package in next step)
-	for i, r := range results {
-		if i > 0 {
-			fmt.Println()
-		}
-		renderBasicResult(r, i == 0)
-	}
+	fmt.Println(ui.RenderResultList(results))
 
 	return nil
-}
-
-// renderBasicResult outputs a simple formatted result.
-// Replaced by Lipgloss rendering in the UI step.
-func renderBasicResult(r vault.SearchResult, isBest bool) {
-	label := "Match"
-	if isBest {
-		label = "Best Match"
-	}
-	fmt.Printf("── %s (confidence: %.0f%%) ──\n", label, r.Confidence)
-	fmt.Printf("  %s\n", r.Command.Raw)
-	fmt.Println()
-	if r.Command.Frequency > 1 {
-		fmt.Printf("  Used %d times", r.Command.Frequency)
-	}
-	if !r.Command.LastSeen.IsZero() {
-		fmt.Printf("  |  Last used: %s", r.Command.LastSeen.Format("2006-01-02"))
-	}
-	if r.Command.Category != "" {
-		fmt.Printf("  |  Category: %s", r.Command.Category)
-	}
-	fmt.Println()
 }
