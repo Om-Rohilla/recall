@@ -1,0 +1,33 @@
+ls -la
+cd /home/user/projects
+git status
+docker compose up -d
+find . -type f -name "*.log" -mtime +30
+kubectl get pods -n staging
+ssh user@server.example.com
+tar -xzf archive.tar.gz -C /opt/
+curl -s https://api.example.com/health
+grep -rn "TODO" --include="*.go" .
+npm install express
+pip install flask
+go test ./...
+make build
+awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -20
+rsync -avz --delete ./src/ user@host:/deploy/
+git log --oneline --graph --all
+docker system prune -af
+chmod 755 /var/www/html
+systemctl restart nginx
+: 1711382400:0;git commit -m "initial commit"
+: 1711382500:0;docker build -t myapp:latest .
+: 1711382600:0;find . -type f -size +100M -exec ls -lh {} \;
+: 1711382700:1;npm run build
+: 1711382800:0;kubectl apply -f deployment.yaml
+export PASSWORD=supersecret
+curl -u admin:password123 https://api.example.com
+aws configure set aws_secret_access_key AKIAIOSFODNN7EXAMPLE
+ls
+cd
+pwd
+clear
+history
