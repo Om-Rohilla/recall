@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -50,13 +51,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version info",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("recall %s\n  built: %s\n  go:    %s\n", Version, BuildDate, "go1.24.1")
+		fmt.Printf("recall %s\n  built:   %s\n  go:      %s\n  os:      %s/%s\n",
+			Version, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	},
-}
-
-// runSearch is called when the first arg isn't a known subcommand.
-// Delegates to the search command logic.
-func runSearch(args []string) error {
-	// Will be wired to search logic in cmd/search.go
-	return fmt.Errorf("search not yet implemented — run 'recall init' first")
 }

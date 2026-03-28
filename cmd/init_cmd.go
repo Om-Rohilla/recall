@@ -1,0 +1,107 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/Om-Rohilla/recall/internal/vault"
+	"github.com/Om-Rohilla/recall/pkg/config"
+	"github.com/Om-Rohilla/recall/pkg/shell"
+	"github.com/spf13/cobra"
+)
+
+var (
+	initShell    string
+	initNoImport bool
+	initVaultPath string
+)
+
+var initCmd = &cobra.Command{
+	Use:   "init",
+	Short: "First-time setup — install shell hook, create vault",
+	Long: `Initialize Recall on your system.
+
+This command:
+  1. Detects your shell (zsh, bash, fish)
+  2. Installs the capture hook into your shell config
+  3. Creates the vault database
+  4. Offers to import existing shell history`,
+	RunE: runInit,
+}
+
+func init() {
+	initCmd.Flags().StringVar(&initShell, "shell", "", "force shell type (zsh, bash, fish)")
+	initCmd.Flags().BoolVar(&initNoImport, "no-import", false, "skip history import prompt")
+	initCmd.Flags().StringVar(&initVaultPath, "vault-path", "", "custom vault database path")
+	rootCmd.AddCommand(initCmd)
+}
+
+func runInit(cmd *cobra.Command, args []string) error {
+	fmt.Println("🔧 Initializing Recall...")
+	fmt.Println()
+
+	// Step 1: Detect shell
+	var shellInfo shell.ShellInfo
+	var err error
+
+	if initShell != "" {
+		shellInfo, err = shell.ForShell(initShell)
+	} else {
+		shellInfo, err = shell.Detect()
+	}
+	if err != nil {
+		return fmt.Errorf("detecting shell: %w", err)
+	}
+	fmt.Printf("  Shell detected: %s\n", shellInfo.Shell)
+	fmt.Printf("  Config file:    %s\n", shellInfo.ConfigPath)
+
+	// Step 2: Create vault
+	cfg := config.Get()
+	vaultPath := cfg.Vault.Path
+	if initVaultPath != "" {
+		vaultPath = initVaultPath
+	}
+
+	store, err := vault.NewStore(vaultPath)
+	if err != nil {
+		return fmt.Errorf("creating vault: %w", err)
+	}
+	store.Close()
+	fmt.Printf("  Vault created:  %s\n", vaultPath)
+
+	// Step 3: Install hook
+	if shell.IsInstalled(shellInfo) {
+		fmt.Println("  Hook:           already installed ✓")
+	} else {
+		if err := shell.InstallHook(shellInfo); err != nil {
+			return fmt.Errorf("installing hook: %w", err)
+		}
+		fmt.Println("  Hook installed: ✓")
+	}
+
+	fmt.Println()
+	fmt.Println("✅ Recall initialized successfully!")
+	fmt.Println()
+
+	if !initNoImport {
+		fmt.Println("💡 Import your existing shell history for instant results:")
+		fmt.Printf("   recall import-history\n")
+		fmt.Println()
+	}
+
+	fmt.Println("🚀 Restart your shell or run:")
+	fmt.Printf("   source %s\n", shellInfo.ConfigPath)
+	fmt.Println()
+
+	// Create config directory if it doesn't exist
+	if _, err := os.Stat(config.DefaultConfigPath()); os.IsNotExist(err) {
+		if err := config.Save(cfg); err != nil {
+			// Non-fatal — config file creation is optional
+			if debug {
+				fmt.Fprintf(os.Stderr, "note: could not create config file: %v\n", err)
+			}
+		}
+	}
+
+	return nil
+}
