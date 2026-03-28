@@ -1,0 +1,60 @@
+# Binaries
+bin/
+recall
+*.exe
+*.out
+
+# Go build artifacts
+*.o
+*.a
+*.so
+vendor/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.test
+coverage.out
+coverage.html
+*.prof
+
+# Local vault data (never commit user data)
+cache/
+*.db
+*.db-shm
+*.db-wal
+vault.db
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS generated
+.DS_Store
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Distribution / Release
+dist/
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# GoReleaser
+dist/
+
+# Temporary files
+tmp/
+*.tmp
+*.log
