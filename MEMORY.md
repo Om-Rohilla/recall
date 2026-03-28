@@ -17,11 +17,11 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 1 — Foundation (NOT STARTED) |
-| **Last thing built** | Documentation only. No code exists yet. |
-| **Next thing to build** | Go project scaffold: `go.mod`, `main.go`, Cobra CLI skeleton |
+| **Current Phase** | Phase 1 — Foundation (COMPLETE) |
+| **Last thing built** | Full Phase 1: scaffold, vault, capture, shell hooks, CLI commands, UI, tests |
+| **Next thing to build** | Phase 2 — Intelligence: intent extraction, multi-signal scoring, context detection, knowledge base |
 | **Blockers** | None |
-| **Known bugs** | None yet |
+| **Known bugs** | None |
 
 ---
 
@@ -40,11 +40,23 @@
 - [x] `LICENSE` — MIT
 - [x] `.cursor/rules/recall-project.mdc` — auto-loaded project rules
 
-### Code (NOT STARTED)
-- [ ] `go.mod` / `go.sum`
-- [ ] `main.go`
-- [ ] `Makefile`
-- [ ] Everything in `cmd/`, `internal/`, `pkg/`, `data/`, `scripts/`, `tests/`
+### Code — Phase 1 (COMPLETE)
+- [x] `go.mod` / `go.sum` — Go module with Cobra, Lipgloss, SQLite, TOML
+- [x] `main.go` — entry point
+- [x] `Makefile` — build, test, clean, install targets
+- [x] `cmd/root.go` — Cobra root command + version
+- [x] `cmd/init_cmd.go` — `recall init` command
+- [x] `cmd/capture.go` — `recall capture` (hidden, called by hook)
+- [x] `cmd/hook.go` — `recall hook zsh|bash`
+- [x] `cmd/import_history.go` — `recall import-history`
+- [x] `cmd/search.go` — `recall search` + default arg search
+- [x] `internal/vault/` — models, schema, store, index (SQLite + FTS5)
+- [x] `internal/capture/` — parser, filter, enricher, receiver
+- [x] `internal/ui/` — theme (Lipgloss), result card rendering
+- [x] `pkg/config/` — TOML config with defaults + env overrides
+- [x] `pkg/shell/` — detect, hooks, install
+- [x] `scripts/hooks/` — recall.zsh, recall.bash
+- [x] `tests/` — 30 table-driven tests (vault + capture)
 
 ---
 
@@ -53,33 +65,33 @@
 ### Phase 1 — Foundation
 | Task | Status | File(s) |
 |------|--------|---------|
-| Go module init (`go.mod`) | NOT STARTED | `go.mod` |
-| Entry point | NOT STARTED | `main.go` |
-| Makefile (build, test, clean) | NOT STARTED | `Makefile` |
-| Cobra root command | NOT STARTED | `cmd/root.go` |
-| SQLite vault schema | NOT STARTED | `internal/vault/schema.go` |
-| Vault store (CRUD + FTS5) | NOT STARTED | `internal/vault/store.go` |
-| Vault models | NOT STARTED | `internal/vault/models.go` |
-| FTS5 index management | NOT STARTED | `internal/vault/index.go` |
-| Command parser | NOT STARTED | `internal/capture/parser.go` |
-| Capture receiver | NOT STARTED | `internal/capture/receiver.go` |
-| Context enricher | NOT STARTED | `internal/capture/enricher.go` |
-| Secret/noise filter | NOT STARTED | `internal/capture/filter.go` |
-| Shell detection | NOT STARTED | `pkg/shell/detect.go` |
-| Hook script generation | NOT STARTED | `pkg/shell/hooks.go` |
-| Hook installer | NOT STARTED | `pkg/shell/install.go` |
-| Zsh hook script | NOT STARTED | `scripts/hooks/recall.zsh` |
-| Bash hook script | NOT STARTED | `scripts/hooks/recall.bash` |
-| Config defaults | NOT STARTED | `pkg/config/defaults.go` |
-| Config manager | NOT STARTED | `pkg/config/config.go` |
-| `recall init` command | NOT STARTED | `cmd/init_cmd.go` |
-| `recall import-history` command | NOT STARTED | `cmd/capture.go` |
-| `recall search` command | NOT STARTED | `cmd/search.go` |
-| Basic result card display | NOT STARTED | `internal/ui/result.go` |
-| Theme/colors | NOT STARTED | `internal/ui/theme.go` |
-| Unit tests (vault) | NOT STARTED | `tests/vault_test.go` |
-| Unit tests (capture) | NOT STARTED | `tests/capture_test.go` |
-| **PHASE 1 COMPLETE** | **NO** | |
+| Go module init (`go.mod`) | DONE | `go.mod` |
+| Entry point | DONE | `main.go` |
+| Makefile (build, test, clean) | DONE | `Makefile` |
+| Cobra root command | DONE | `cmd/root.go` |
+| SQLite vault schema | DONE | `internal/vault/schema.go` |
+| Vault store (CRUD + FTS5) | DONE | `internal/vault/store.go` |
+| Vault models | DONE | `internal/vault/models.go` |
+| FTS5 index management | DONE | `internal/vault/index.go` |
+| Command parser | DONE | `internal/capture/parser.go` |
+| Capture receiver | DONE | `internal/capture/receiver.go` |
+| Context enricher | DONE | `internal/capture/enricher.go` |
+| Secret/noise filter | DONE | `internal/capture/filter.go` |
+| Shell detection | DONE | `pkg/shell/detect.go` |
+| Hook script generation | DONE | `pkg/shell/hooks.go` |
+| Hook installer | DONE | `pkg/shell/install.go` |
+| Zsh hook script | DONE | `scripts/hooks/recall.zsh` |
+| Bash hook script | DONE | `scripts/hooks/recall.bash` |
+| Config defaults | DONE | `pkg/config/defaults.go` |
+| Config manager | DONE | `pkg/config/config.go` |
+| `recall init` command | DONE | `cmd/init_cmd.go` |
+| `recall import-history` command | DONE | `cmd/import_history.go` |
+| `recall search` command | DONE | `cmd/search.go` |
+| Basic result card display | DONE | `internal/ui/result.go` |
+| Theme/colors | DONE | `internal/ui/theme.go` |
+| Unit tests (vault) | DONE | `tests/vault_test.go` |
+| Unit tests (capture) | DONE | `tests/capture_test.go` |
+| **PHASE 1 COMPLETE** | **YES** | |
 
 ### Phase 2 — Intelligence
 | Task | Status | File(s) |
@@ -153,6 +165,9 @@
 | 5 | TOML over YAML for config | Simpler, no whitespace footguns, standard in Go ecosystem | 2026-03-25 |
 | 6 | AES-256-GCM for vault encryption | Go stdlib, no external deps, industry standard | 2026-03-25 |
 | 7 | Scoring weights: text 30%, intent 25%, freq 20%, context 15%, recency 10% | Balanced between relevance and personalization | 2026-03-25 |
+| 8 | Phase 1 uses `recall capture` subcommand instead of Unix socket | Simpler, fast enough (<1ms), socket can be added in Phase 2 if needed | 2026-03-28 |
+| 9 | Phase 1 FTS5 search uses OR-joined terms | Simple but effective for keyword matching; Phase 2 adds intent expansion | 2026-03-28 |
+| 10 | Column named `binary_name` not `binary` in schema | `binary` is a reserved word in some SQL contexts | 2026-03-28 |
 
 ---
 
@@ -183,11 +198,12 @@
 
 ## LESSONS LEARNED
 
-_(Update this section as we build. Record what went wrong, what worked, and what to avoid.)_
-
 | # | Lesson | Context |
 |---|--------|---------|
-| | _(none yet — project just started)_ | |
+| 1 | modernc.org/sqlite v1.48 requires Go 1.25+, go mod auto-upgraded | Phase 1: go.mod switched from go 1.24.1 to 1.25.0 |
+| 2 | FTS5 triggers must be created after the virtual table | Phase 1: schema.go creation order matters |
+| 3 | Use `ON CONFLICT(raw) DO UPDATE` for batch imports — much cleaner than check-then-insert | Phase 1: store.go BatchInsertCommands |
+| 4 | Parser classifies `npm install express` as subcommand="install express" since npm is a multi-cmd tool — acceptable for Phase 1, refine in Phase 2 | Phase 1: parser tests |
 
 ---
 
@@ -198,6 +214,7 @@ _(Update this after each work session so the next session knows where we left of
 | Session | Date | What Was Done | What's Next |
 |---------|------|--------------|-------------|
 | 1 | 2026-03-25 | Created all documentation: README, 5 docs files, PROMPT.md, MEMORY.md, .gitignore, LICENSE, cursor rules. No code yet. | Start Phase 1: `go.mod`, `main.go`, Cobra skeleton |
+| 2 | 2026-03-28 | Built ENTIRE Phase 1 Foundation: Go scaffold, Cobra CLI (7 commands), SQLite vault with FTS5, capture pipeline (parser, filter, enricher, receiver), shell hooks (zsh+bash), config system (TOML), Lipgloss UI (theme + result cards), 30 tests. All passing. Pushed 8 commits to GitHub. | Start Phase 2: Intent extraction, multi-signal scoring, context detection, knowledge base |
 
 ---
 
