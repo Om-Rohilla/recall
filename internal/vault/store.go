@@ -456,10 +456,155 @@ func sanitizeFTSQuery(query string) string {
 	return strings.Join(result, " ")
 }
 
+func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	orderClause := "last_seen DESC"
+	switch sortBy {
+	case "frequency":
+		orderClause = "frequency DESC"
+	case "alpha":
+		orderClause = "raw ASC"
+	case "recency":
+		orderClause = "last_seen DESC"
+	}
+	rows, err := s.db.Query(
+		fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands ORDER BY %s LIMIT ?`, orderClause), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting all commands: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+func (s *Store) GetCommandsByCategory(category string, limit int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE category = ? ORDER BY frequency DESC LIMIT ?`, category, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting commands by category: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+func (s *Store) DeleteCommand(id int64) error {
+	if _, err := s.db.Exec("DELETE FROM contexts WHERE command_id = ?", id); err != nil {
+		return fmt.Errorf("deleting contexts for command %d: %w", id, err)
+	}
+	if _, err := s.db.Exec("DELETE FROM commands WHERE id = ?", id); err != nil {
+		return fmt.Errorf("deleting command %d: %w", id, err)
+	}
+	return nil
+}
+
+func (s *Store) GetCategories() ([]CategoryCount, error) {
+	rows, err := s.db.Query(
+		`SELECT category, COUNT(*) as cnt, SUM(frequency) as total_freq
+		 FROM commands WHERE category != '' GROUP BY category ORDER BY total_freq DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting categories: %w", err)
+	}
+	defer rows.Close()
+	var cats []CategoryCount
+	for rows.Next() {
+		var c CategoryCount
+		if err := rows.Scan(&c.Category, &c.Count, &c.TotalFrequency); err != nil {
+			return nil, fmt.Errorf("scanning category: %w", err)
+		}
+		cats = append(cats, c)
+	}
+	return cats, rows.Err()
+}
+
+func (s *Store) GetTopCommands(period int, limit int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	since := time.Now().UTC().AddDate(0, 0, -period).Format(time.RFC3339)
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE last_seen >= ? ORDER BY frequency DESC LIMIT ?`, since, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting top commands: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+func (s *Store) GetRareCommands(maxFreq int, limit int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if maxFreq <= 0 {
+		maxFreq = 3
+	}
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE frequency <= ? AND length(raw) > 10 ORDER BY length(raw) DESC LIMIT ?`, maxFreq, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting rare commands: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+func (s *Store) GetVaultPeriod() (time.Time, time.Time, error) {
+	var first, last string
+	err := s.db.QueryRow("SELECT COALESCE(MIN(first_seen), ''), COALESCE(MAX(last_seen), '') FROM commands").Scan(&first, &last)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("getting vault period: %w", err)
+	}
+	firstTime, _ := time.Parse(time.RFC3339, first)
+	lastTime, _ := time.Parse(time.RFC3339, last)
+	return firstTime, lastTime, nil
+}
+
+func (s *Store) GetHighFrequencyCommands(minFreq int) ([]Command, error) {
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE frequency >= ? ORDER BY frequency DESC`, minFreq,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting high frequency commands: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+func scanCommands(rows *sql.Rows) ([]Command, error) {
+	var cmds []Command
+	for rows.Next() {
+		var cmd Command
+		var firstSeen, lastSeen string
+		err := rows.Scan(
+			&cmd.ID, &cmd.Raw, &cmd.Binary, &cmd.Subcommand, &cmd.Flags,
+			&cmd.Category, &cmd.Frequency, &firstSeen, &lastSeen,
+			&cmd.LastExit, &cmd.AvgDuration,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scanning command: %w", err)
+		}
+		cmd.FirstSeen, _ = time.Parse(time.RFC3339, firstSeen)
+		cmd.LastSeen, _ = time.Parse(time.RFC3339, lastSeen)
+		cmds = append(cmds, cmd)
+	}
+	return cmds, rows.Err()
+}
+
 // scoreToConfidence maps FTS5 rank + frequency to a 0-100 confidence percentage.
-// Phase 1 uses a simple heuristic; Phase 2 replaces this with multi-signal scoring.
 func scoreToConfidence(ftsScore float64, frequency int) float64 {
-	textScore := ftsScore / (ftsScore + 1.0) // normalize to 0-1
+	textScore := ftsScore / (ftsScore + 1.0)
 	freqBoost := float64(frequency) / (float64(frequency) + 10.0)
 	confidence := (textScore*0.7 + freqBoost*0.3) * 100
 	if confidence > 99 {

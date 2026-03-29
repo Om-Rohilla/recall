@@ -17,6 +17,8 @@ var (
 	ColorMuted     = lipgloss.Color("#6B7280") // gray
 	ColorText      = lipgloss.Color("#E5E7EB") // light gray
 	ColorBright    = lipgloss.Color("#F9FAFB") // white
+	ColorDim       = lipgloss.Color("#4B5563") // dark gray
+	ColorAccent    = lipgloss.Color("#8B5CF6") // light purple
 )
 
 var (
@@ -63,23 +65,84 @@ var (
 	CategoryStyle = lipgloss.NewStyle().
 			Foreground(ColorSecondary).
 			Italic(true)
+
+	// TUI-specific styles
+	ActiveTabStyle = lipgloss.NewStyle().
+			Foreground(ColorBright).
+			Background(ColorPrimary).
+			Bold(true).
+			Padding(0, 2)
+
+	InactiveTabStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted).
+				Padding(0, 2)
+
+	SelectedItemStyle = lipgloss.NewStyle().
+				Foreground(ColorBright).
+				Background(ColorPrimary).
+				Bold(true)
+
+	NormalItemStyle = lipgloss.NewStyle().
+			Foreground(ColorText)
+
+	StatusBarStyle = lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Background(lipgloss.Color("#1F2937"))
+
+	SearchInputStyle = lipgloss.NewStyle().
+				Foreground(ColorBright).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColorSecondary).
+				Padding(0, 1)
+
+	BadgeStyle = lipgloss.NewStyle().
+			Foreground(ColorBright).
+			Background(ColorPrimary).
+			Bold(true).
+			Padding(0, 1)
+
+	DimStyle = lipgloss.NewStyle().
+			Foreground(ColorDim)
+
+	AccentStyle = lipgloss.NewStyle().
+			Foreground(ColorAccent)
+
+	FrequencyBarStyle = lipgloss.NewStyle().
+				Foreground(ColorSuccess)
+
+	StatsHeaderStyle = lipgloss.NewStyle().
+				Foreground(ColorPrimary).
+				Bold(true).
+				Border(lipgloss.NormalBorder(), false, false, true, false).
+				BorderForeground(ColorDim)
 )
 
 func init() {
 	if noColor {
-		// Reset all styles to plain text
+		plain := lipgloss.NewStyle()
 		BorderStyle = lipgloss.NewStyle().Padding(1, 2)
-		TitleStyle = lipgloss.NewStyle()
-		CommandStyle = lipgloss.NewStyle()
-		MetadataStyle = lipgloss.NewStyle()
-		ConfidenceHighStyle = lipgloss.NewStyle()
-		ConfidenceMedStyle = lipgloss.NewStyle()
-		ConfidenceLowStyle = lipgloss.NewStyle()
-		HintStyle = lipgloss.NewStyle()
-		SuccessStyle = lipgloss.NewStyle()
-		WarningStyle = lipgloss.NewStyle()
-		ErrorStyle = lipgloss.NewStyle()
-		CategoryStyle = lipgloss.NewStyle()
+		TitleStyle = plain
+		CommandStyle = plain
+		MetadataStyle = plain
+		ConfidenceHighStyle = plain
+		ConfidenceMedStyle = plain
+		ConfidenceLowStyle = plain
+		HintStyle = plain
+		SuccessStyle = plain
+		WarningStyle = plain
+		ErrorStyle = plain
+		CategoryStyle = plain
+		ActiveTabStyle = plain
+		InactiveTabStyle = plain
+		SelectedItemStyle = plain
+		NormalItemStyle = plain
+		StatusBarStyle = plain
+		SearchInputStyle = plain
+		BadgeStyle = plain
+		DimStyle = plain
+		AccentStyle = plain
+		FrequencyBarStyle = plain
+		StatsHeaderStyle = plain
 	}
 }
 

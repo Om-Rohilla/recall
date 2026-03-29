@@ -56,6 +56,35 @@ fi
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec __recall_preexec
 add-zsh-hook precmd __recall_precmd
+
+# Recall hotkey bindings
+__recall_search_widget() {
+    local selected
+    selected=$(recall search-tui 2>/dev/null)
+    if [ -n "$selected" ]; then
+        LBUFFER="$selected"
+    fi
+    zle reset-prompt
+}
+zle -N __recall_search_widget
+
+__recall_vault_widget() {
+    recall vault </dev/tty
+    zle reset-prompt
+}
+zle -N __recall_vault_widget
+
+__recall_explain_widget() {
+    if [ -n "$BUFFER" ]; then
+        recall explain "$BUFFER" </dev/tty
+        zle reset-prompt
+    fi
+}
+zle -N __recall_explain_widget
+
+bindkey '^ ' __recall_search_widget   # Ctrl+Space
+bindkey '^K' __recall_vault_widget     # Ctrl+K
+bindkey '^E' __recall_explain_widget   # Ctrl+E
 `
 }
 
@@ -100,6 +129,30 @@ fi
 
 trap '__recall_preexec' DEBUG
 PROMPT_COMMAND="__recall_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+
+# Recall hotkey bindings
+__recall_search_binding() {
+    local selected
+    selected=$(recall search-tui 2>/dev/null)
+    if [ -n "$selected" ]; then
+        READLINE_LINE="$selected"
+        READLINE_POINT=${#READLINE_LINE}
+    fi
+}
+
+__recall_vault_binding() {
+    recall vault </dev/tty
+}
+
+__recall_explain_binding() {
+    if [ -n "$READLINE_LINE" ]; then
+        recall explain "$READLINE_LINE" </dev/tty
+    fi
+}
+
+bind -x '"\C- ": __recall_search_binding'   # Ctrl+Space
+bind -x '"\C-k": __recall_vault_binding'    # Ctrl+K
+bind -x '"\C-e": __recall_explain_binding'  # Ctrl+E (overrides default end-of-line)
 `
 }
 

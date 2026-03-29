@@ -60,6 +60,12 @@ type VaultStats struct {
 	TotalContexts  int `json:"total_contexts"`
 }
 
+type CategoryCount struct {
+	Category       string `json:"category"`
+	Count          int    `json:"count"`
+	TotalFrequency int    `json:"total_frequency"`
+}
+
 // CaptureData is the raw data received from a shell hook.
 type CaptureData struct {
 	RawCommand  string
