@@ -457,9 +457,6 @@ func sanitizeFTSQuery(query string) string {
 }
 
 func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
-	if limit <= 0 {
-		limit = 500
-	}
 	orderClause := "last_seen DESC"
 	switch sortBy {
 	case "frequency":
@@ -469,10 +466,19 @@ func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
 	case "recency":
 		orderClause = "last_seen DESC"
 	}
-	rows, err := s.db.Query(
-		fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
-		 FROM commands ORDER BY %s LIMIT ?`, orderClause), limit,
-	)
+	var rows *sql.Rows
+	var err error
+	if limit <= 0 {
+		rows, err = s.db.Query(
+			fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+			 FROM commands ORDER BY %s`, orderClause),
+		)
+	} else {
+		rows, err = s.db.Query(
+			fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+			 FROM commands ORDER BY %s LIMIT ?`, orderClause), limit,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("getting all commands: %w", err)
 	}
@@ -600,6 +606,158 @@ func scanCommands(rows *sql.Rows) ([]Command, error) {
 		cmds = append(cmds, cmd)
 	}
 	return cmds, rows.Err()
+}
+
+func (s *Store) GetAllContexts() ([]Context, error) {
+	rows, err := s.db.Query(
+		`SELECT id, command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id
+		 FROM contexts ORDER BY timestamp DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting all contexts: %w", err)
+	}
+	defer rows.Close()
+
+	var ctxs []Context
+	for rows.Next() {
+		var ctx Context
+		var ts string
+		err := rows.Scan(&ctx.ID, &ctx.CommandID, &ctx.Cwd, &ctx.GitRepo,
+			&ctx.GitBranch, &ctx.ProjectType, &ts,
+			&ctx.ExitCode, &ctx.DurationMs, &ctx.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("scanning context: %w", err)
+		}
+		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		ctxs = append(ctxs, ctx)
+	}
+	return ctxs, rows.Err()
+}
+
+func (s *Store) GetAllPatterns() ([]Pattern, error) {
+	rows, err := s.db.Query(
+		`SELECT id, template, frequency, suggested_alias FROM patterns ORDER BY frequency DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting all patterns: %w", err)
+	}
+	defer rows.Close()
+
+	var patterns []Pattern
+	for rows.Next() {
+		var p Pattern
+		if err := rows.Scan(&p.ID, &p.Template, &p.Frequency, &p.SuggestedAlias); err != nil {
+			return nil, fmt.Errorf("scanning pattern: %w", err)
+		}
+		patterns = append(patterns, p)
+	}
+	return patterns, rows.Err()
+}
+
+// ExportVaultData exports all vault data for serialization.
+func (s *Store) ExportVaultData(commandsOnly bool) (*ExportData, error) {
+	cmds, err := s.GetAllCommands("recency", 0)
+	if err != nil {
+		return nil, fmt.Errorf("exporting commands: %w", err)
+	}
+
+	data := &ExportData{
+		Version:      1,
+		ExportedAt:   time.Now().UTC(),
+		Commands:     cmds,
+		CommandCount: len(cmds),
+	}
+
+	if !commandsOnly {
+		ctxs, err := s.GetAllContexts()
+		if err != nil {
+			return nil, fmt.Errorf("exporting contexts: %w", err)
+		}
+		data.Contexts = ctxs
+		data.ContextCount = len(ctxs)
+
+		patterns, err := s.GetAllPatterns()
+		if err != nil {
+			return nil, fmt.Errorf("exporting patterns: %w", err)
+		}
+		data.Patterns = patterns
+	}
+
+	return data, nil
+}
+
+// ImportVaultData imports vault data, replacing or merging based on the merge flag.
+func (s *Store) ImportVaultData(data *ExportData, merge bool) (importedCmds, importedCtxs int, err error) {
+	if !merge {
+		if _, err := s.db.Exec("DELETE FROM contexts"); err != nil {
+			return 0, 0, fmt.Errorf("clearing contexts: %w", err)
+		}
+		if _, err := s.db.Exec("DELETE FROM commands"); err != nil {
+			return 0, 0, fmt.Errorf("clearing commands: %w", err)
+		}
+		if _, err := s.db.Exec("DELETE FROM patterns"); err != nil {
+			return 0, 0, fmt.Errorf("clearing patterns: %w", err)
+		}
+	}
+
+	// Build a map of old ID -> new ID for context remapping
+	idMap := make(map[int64]int64)
+
+	for _, cmd := range data.Commands {
+		oldID := cmd.ID
+		cmd.ID = 0
+
+		if merge {
+			var existingID int64
+			err := s.db.QueryRow("SELECT id FROM commands WHERE raw = ?", cmd.Raw).Scan(&existingID)
+			if err == nil {
+				// Command exists — update frequency
+				if _, err := s.db.Exec(
+					"UPDATE commands SET frequency = frequency + ? WHERE id = ?",
+					cmd.Frequency, existingID,
+				); err != nil {
+					continue
+				}
+				idMap[oldID] = existingID
+				importedCmds++
+				continue
+			}
+		}
+
+		newID, err := s.InsertCommand(&cmd)
+		if err != nil {
+			continue
+		}
+		idMap[oldID] = newID
+		importedCmds++
+	}
+
+	for _, ctx := range data.Contexts {
+		newCmdID, ok := idMap[ctx.CommandID]
+		if !ok {
+			continue
+		}
+		ctx.CommandID = newCmdID
+		ctx.ID = 0
+		if err := s.InsertContext(&ctx); err != nil {
+			continue
+		}
+		importedCtxs++
+	}
+
+	for _, p := range data.Patterns {
+		_, _ = s.db.Exec(
+			`INSERT INTO patterns (template, frequency, suggested_alias) VALUES (?, ?, ?)
+			 ON CONFLICT(template) DO UPDATE SET frequency = frequency + excluded.frequency`,
+			p.Template, p.Frequency, p.SuggestedAlias,
+		)
+	}
+
+	if err := s.RebuildFTSIndex(); err != nil {
+		return importedCmds, importedCtxs, fmt.Errorf("rebuilding FTS index after import: %w", err)
+	}
+
+	return importedCmds, importedCtxs, nil
 }
 
 // scoreToConfidence maps FTS5 rank + frequency to a 0-100 confidence percentage.

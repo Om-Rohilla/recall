@@ -78,3 +78,14 @@ type CaptureData struct {
 	ProjectType string
 	SessionID   string
 }
+
+// ExportData is the JSON-serializable vault export payload.
+type ExportData struct {
+	Version      int       `json:"version"`
+	ExportedAt   time.Time `json:"exported_at"`
+	Commands     []Command `json:"commands"`
+	Contexts     []Context `json:"contexts,omitempty"`
+	Patterns     []Pattern `json:"patterns,omitempty"`
+	CommandCount int       `json:"command_count"`
+	ContextCount int       `json:"context_count"`
+}
