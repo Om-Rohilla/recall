@@ -263,8 +263,139 @@ func (s *Store) BatchInsertCommands(cmds []Command) (int, error) {
 	return inserted, nil
 }
 
+func (s *Store) SearchKnowledgeFTS5(query string, limit int) ([]Knowledge, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	ftsQuery := buildFTSQuery(query)
+	if ftsQuery == "" {
+		return nil, nil
+	}
+
+	rows, err := s.db.Query(
+		`SELECT k.id, k.command, k.description, k.intents, k.category,
+		        k.flags_doc, k.examples, k.danger_level, rank
+		 FROM knowledge_fts kf
+		 JOIN knowledge k ON k.id = kf.rowid
+		 WHERE knowledge_fts MATCH ?
+		 ORDER BY rank
+		 LIMIT ?`,
+		ftsQuery, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("knowledge FTS5 search: %w", err)
+	}
+	defer rows.Close()
+
+	var results []Knowledge
+	for rows.Next() {
+		var k Knowledge
+		var rank float64
+		err := rows.Scan(
+			&k.ID, &k.Command, &k.Description, &k.Intents, &k.Category,
+			&k.FlagsDoc, &k.Examples, &k.DangerLevel, &rank,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scanning knowledge result: %w", err)
+		}
+		results = append(results, k)
+	}
+	return results, rows.Err()
+}
+
+func (s *Store) InsertKnowledge(k *Knowledge) (int64, error) {
+	result, err := s.db.Exec(
+		`INSERT INTO knowledge (command, description, intents, category, flags_doc, examples, danger_level)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		k.Command, k.Description, k.Intents, k.Category,
+		k.FlagsDoc, k.Examples, k.DangerLevel,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("inserting knowledge: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) BatchInsertKnowledge(entries []Knowledge) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`INSERT OR IGNORE INTO knowledge (command, description, intents, category, flags_doc, examples, danger_level)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("preparing knowledge insert: %w", err)
+	}
+	defer stmt.Close()
+
+	inserted := 0
+	for _, k := range entries {
+		_, err := stmt.Exec(k.Command, k.Description, k.Intents, k.Category,
+			k.FlagsDoc, k.Examples, k.DangerLevel)
+		if err != nil {
+			continue
+		}
+		inserted++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("committing knowledge insert: %w", err)
+	}
+	return inserted, nil
+}
+
+func (s *Store) KnowledgeCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM knowledge").Scan(&count)
+	return count, err
+}
+
+func (s *Store) GetContextsForCommand(commandID int64) ([]Context, error) {
+	rows, err := s.db.Query(
+		`SELECT id, command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id
+		 FROM contexts WHERE command_id = ? ORDER BY timestamp DESC LIMIT 10`,
+		commandID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting contexts for command %d: %w", commandID, err)
+	}
+	defer rows.Close()
+
+	var ctxs []Context
+	for rows.Next() {
+		var ctx Context
+		var ts string
+		err := rows.Scan(&ctx.ID, &ctx.CommandID, &ctx.Cwd, &ctx.GitRepo,
+			&ctx.GitBranch, &ctx.ProjectType, &ts,
+			&ctx.ExitCode, &ctx.DurationMs, &ctx.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("scanning context: %w", err)
+		}
+		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		ctxs = append(ctxs, ctx)
+	}
+	return ctxs, rows.Err()
+}
+
+func (s *Store) GetMaxFrequency() (int, error) {
+	var maxFreq int
+	err := s.db.QueryRow("SELECT COALESCE(MAX(frequency), 1) FROM commands").Scan(&maxFreq)
+	if err != nil {
+		return 1, fmt.Errorf("getting max frequency: %w", err)
+	}
+	if maxFreq == 0 {
+		maxFreq = 1
+	}
+	return maxFreq, nil
+}
+
 // buildFTSQuery converts a natural language query into an FTS5 query.
-// For Phase 1, we split on spaces and OR the terms together.
+// Splits on spaces and OR-joins the terms.
 func buildFTSQuery(query string) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
