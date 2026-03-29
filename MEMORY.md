@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 5 — Security + Export (COMPLETE) |
-| **Last thing built** | Full Phase 5: AES-256-GCM encryption with Argon2id key derivation, recall export/import commands (encrypted + plain + merge), recall config command (show/set/get/reset/path), Fish shell hook with hotkeys, secure password input, 22 new tests (102 total) |
-| **Next thing to build** | Phase 6 — Release: GoReleaser, CI/CD, install script, expanded knowledge base |
+| **Current Phase** | Phase 6 — Release & Distribution (COMPLETE) |
+| **Last thing built** | Full Phase 6: GoReleaser config (cross-platform linux/darwin amd64/arm64, Homebrew tap), GitHub Actions CI/CD (ci.yml + release.yml), POSIX install script (scripts/install.sh), knowledge base expanded to 504 commands (16 categories), Makefile targets (snapshot, release-dry-run, coverage), release tests (tests/release_test.go), README.md updates (badges, URLs, typos, roadmap) |
+| **Next thing to build** | All 6 phases complete. Project is release-ready. |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -149,7 +149,7 @@
 | Search orchestrator | DONE | `internal/intelligence/engine.go` |
 | Pattern extraction | DONE | `internal/intelligence/patterns.go` |
 | Knowledge base loader | DONE | `internal/intelligence/knowledge.go` |
-| Knowledge base data (200 cmds) | DONE | `data/knowledge.json` |
+| Knowledge base data (504 cmds) | DONE | `data/knowledge.json` |
 | Git context detection | DONE | `internal/context/git.go` |
 | Project type detection | DONE | `internal/context/project.go` |
 | Session tracking | DONE | `internal/context/session.go` |
@@ -197,14 +197,18 @@
 | Phase 5 tests | DONE | `tests/security_test.go` |
 | **PHASE 5 COMPLETE** | **YES** | |
 
-### Phase 6 — Release
+### Phase 6 — Release & Distribution
 | Task | Status | File(s) |
 |------|--------|---------|
-| GoReleaser config | NOT STARTED | `.goreleaser.yml` |
-| GitHub Actions CI/CD | NOT STARTED | `.github/workflows/` |
-| Install script | NOT STARTED | `scripts/install.sh` |
-| Knowledge base (500 cmds) | NOT STARTED | `data/knowledge.json` |
-| **PHASE 6 COMPLETE** | **NO** | |
+| GoReleaser config | DONE | `.goreleaser.yml` |
+| GitHub Actions CI workflow | DONE | `.github/workflows/ci.yml` |
+| GitHub Actions Release workflow | DONE | `.github/workflows/release.yml` |
+| Install script (POSIX, no jq) | DONE | `scripts/install.sh` |
+| Makefile targets (snapshot, release-dry-run, coverage) | DONE | `Makefile` |
+| Knowledge base expansion (504 cmds, 16 categories) | DONE | `data/knowledge.json` |
+| Phase 6 tests (11 tests) | DONE | `tests/release_test.go` |
+| README.md updates (badges, URLs, typos, roadmap) | DONE | `README.md` |
+| **PHASE 6 COMPLETE** | **YES** | |
 
 ---
 
@@ -301,6 +305,7 @@ _(Update this after each work session so the next session knows where we left of
 | 4 | 2026-03-29 | Built ENTIRE Phase 3 Explain + Compose: command decomposition engine with pipeline splitting, combined flag expansion, danger detection (3 levels: safe/caution/destructive), warnings & suggestions. Flag database covering 50+ CLI tools with flags, descriptions, danger levels, tips, subcommands. `recall explain` command with --short/--json/--no-warnings. `recall compose` interactive wizard for 9 tools + generic fallback. 22 explain tests (71 total). All passing. Pushed to GitHub. | Start Phase 4: UX Polish — Bubbletea TUI, vault browser, stats, aliases, hotkeys |
 | 5 | 2026-03-29 | Built ENTIRE Phase 4 UX Polish: Added bubbletea + bubbles deps. Built Bubbletea vault browser TUI (list/categories/details/help views, live search, sort cycling, delete, keybindings). Built inline search TUI with live-as-you-type results. `recall vault` (v), `recall stats`, `recall suggest-aliases` (sa) commands. Polished Lipgloss theme with 12 new styles. Added hotkey bindings (Ctrl+Space/K/E) for zsh + bash. Added 8 new Store methods for queries. 20+ new tests (80 total). All passing. | Start Phase 5: Security + Export — AES-256 encryption, export/import, Fish support |
 | 6 | 2026-03-29 | Built ENTIRE Phase 5 Security + Export: AES-256-GCM encryption with Argon2id key derivation (crypto.go). Secure password input with terminal echo suppression (terminal.go). Export/import commands with encrypted+plain+merge modes (export_cmd.go). Config command with show/set/get/reset/path subcommands and validation (config_cmd.go). Fish shell hook with postexec capture + hotkeys (recall.fish, hooks.go). ExportData model + vault store export/import methods. 22 new tests (102 total). All passing. | Start Phase 6: Release — GoReleaser, CI/CD, install script, expanded knowledge base |
+| 7 | 2026-03-29 | Built ENTIRE Phase 6 Release & Distribution: GoReleaser config (cross-platform linux/darwin × amd64/arm64, Homebrew tap, ldflags). GitHub Actions CI (vet, test -race, build, staticcheck) + Release (tag-triggered GoReleaser). POSIX install script (OS/arch detection, checksum verify, fallback dir). Makefile targets (snapshot, release-dry-run, coverage). Knowledge base 232→504 commands across 16 categories (added security, database, aws, terraform). 11 release tests. README updates (CI badge, URLs, typos, roadmap). All tests passing. | ALL 6 PHASES COMPLETE. Tag v0.1.0 to trigger first release. |
 
 ---
 

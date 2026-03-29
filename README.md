@@ -10,6 +10,7 @@
     <a href="#contributing">Contributing</a>
   </p>
   <p align="center">
+    <a href="https://github.com/Om-Rohilla/recall/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Om-Rohilla/recall/actions/workflows/ci.yml/badge.svg"></a>
     <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg">
     <img alt="Go Version" src="https://img.shields.io/badge/go-1.22+-00ADD8.svg">
     <img alt="Platform" src="https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg">
@@ -82,13 +83,13 @@ Existing tools don't fix this:
 ### One-Line Install
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/user/recall/main/scripts/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/Om-Rohilla/recall/main/scripts/install.sh | sh
 ```
 
 ### Build From Source
 
 ```bash
-git clone https://github.com/user/recall.git
+git clone https://github.com/Om-Rohilla/recall.git
 cd recall
 make build
 sudo mv ./bin/recall /usr/local/bin/
@@ -97,6 +98,7 @@ sudo mv ./bin/recall /usr/local/bin/
 ### Homebrew (macOS / Linux)
 
 ```bash
+brew tap Om-Rohilla/tap
 brew install recall
 ```
 
@@ -311,7 +313,7 @@ Recall takes privacy seriously:
 | TUI | Bubbletea + Lipgloss |
 | Storage | SQLite + FTS5 |
 | Encryption | AES-256-GCM |
-| Config |, TOML |
+| Config | TOML |
 
 Single static binary. No runtime dependencies. No Docker. No containers.
 
@@ -323,12 +325,12 @@ For the full tech breakdown, see [Tech Stack](docs/TECH-STACK.md).
 
 ```
 recall/
-├── main.go                # Entry oint
+├── main.go                # Entry point
 ├── cmd/                   # CLI commands (Cobra)
 ├── internal/
 │   ├── capture/           # Shell hook → parse → enrich → store
 │   ├── intelligence/      # Intent engine, scorer, knowledge base
-│   ├── vault/             # SQLite + FTS5 + encyption
+│   ├── vault/             # SQLite + FTS5 + encryption
 │   ├── context/           # Git, project, session detection
 │   ├── explain/           # Command decomposition
 │   └── ui/                # Bubbletea TUI components
@@ -352,7 +354,7 @@ Contributions are welcome. Here's how to get started:
 
 ```bash
 # Clone
-git clone https://github.com/user/recall.git
+git clone https://github.com/Om-Rohilla/recall.git
 cd recall
 
 # Install dependencies
@@ -387,11 +389,11 @@ make build
 ## Roadmap
 
 - [x] Phase 1: CLI skeleton, vault, shell hooks, basic search
-- [ ] Phase 2: Multi-signal scoring, context detection, knowledge base
-- [ ] Phase 3: Explain mode, compose mode
-- [ ] Phase 4: Bubbletea TUI, hotkey integration, alias suggestions
-- [ ] Phase 5: Encryption, export/import, Fish support
-- [ ] Phase 6: Cross-platform release, Homebrew, AUR
+- [x] Phase 2: Multi-signal scoring, context detection, knowledge base
+- [x] Phase 3: Explain mode, compose mode
+- [x] Phase 4: Bubbletea TUI, hotkey integration, alias suggestions
+- [x] Phase 5: Encryption, export/import, Fish support
+- [x] Phase 6: Cross-platform release, GoReleaser, Homebrew, CI/CD
 
 ---
 
