@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 2 — Intelligence (COMPLETE) |
-| **Last thing built** | Full Phase 2: intelligence layer, context detection, knowledge base, scoring pipeline, tests |
-| **Next thing to build** | Phase 3 — Explain + Compose: command decomposition, flag database, explain/compose commands |
+| **Current Phase** | Phase 3 — Explain + Compose (COMPLETE) |
+| **Last thing built** | Full Phase 3: command decomposition engine, flag database (50+ tools), explain command, compose wizard, danger detection, 22 explain tests |
+| **Next thing to build** | Phase 4 — UX Polish: Bubbletea TUI, vault browser, stats, aliases, hotkeys, Lipgloss formatting |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -72,6 +72,13 @@
 - [x] `internal/vault/store.go` — Added knowledge CRUD, context queries, max frequency, FTS5 query sanitization
 - [x] `cmd/search.go` — Wired intelligence pipeline (replaces raw FTS5 with full scoring)
 - [x] `tests/intelligence_test.go` — 20 new tests (49 total)
+
+### Code — Phase 3 (COMPLETE)
+- [x] `internal/explain/flags.go` — Flag database: 50+ CLI tools with flags, danger levels, tips, subcommands
+- [x] `internal/explain/parser.go` — Command decomposition engine: pipeline splitting, tokenization, combined flag expansion, danger detection, warnings, suggestions
+- [x] `cmd/explain.go` — `recall explain` command with `--short`, `--json`, `--no-warnings` flags
+- [x] `cmd/compose.go` — `recall compose` interactive wizard (find, tar, grep, docker, git, curl, ssh, rsync, chmod + generic fallback)
+- [x] `tests/explain_test.go` — 22 explain tests (71 total across all test files)
 
 ---
 
@@ -130,12 +137,12 @@
 ### Phase 3 — Explain + Compose
 | Task | Status | File(s) |
 |------|--------|---------|
-| Command decomposition engine | NOT STARTED | `internal/explain/parser.go` |
-| Flag database (200+ tools) | NOT STARTED | `internal/explain/flags.go` |
-| `recall explain` command | NOT STARTED | `cmd/explain.go` |
-| `recall compose` command | NOT STARTED | `cmd/compose.go` |
-| Explain tests | NOT STARTED | `tests/explain_test.go` |
-| **PHASE 3 COMPLETE** | **NO** | |
+| Command decomposition engine | DONE | `internal/explain/parser.go` |
+| Flag database (50+ tools) | DONE | `internal/explain/flags.go` |
+| `recall explain` command | DONE | `cmd/explain.go` |
+| `recall compose` command | DONE | `cmd/compose.go` |
+| Explain tests | DONE | `tests/explain_test.go` |
+| **PHASE 3 COMPLETE** | **YES** | |
 
 ### Phase 4 — UX Polish
 | Task | Status | File(s) |
@@ -189,6 +196,10 @@
 | 12 | FTS5 query sanitization in store layer | Prevents double-processing when intelligence engine builds queries | 2026-03-29 |
 | 13 | Log-normalized frequency scoring | Prevents power-law dominance by very high-frequency commands | 2026-03-29 |
 | 14 | Context scoring uses best-match across all contexts for a command | More accurate than averaging — a command used once in matching context should score high | 2026-03-29 |
+| 15 | Three-level danger system: Safe/Caution/Destructive | Maps to green/yellow/red in UI. Covers all common dangerous patterns | 2026-03-29 |
+| 16 | Flag database as Go map, not external file | Same rationale as synonyms — compiles into binary, zero I/O, fast lookups | 2026-03-29 |
+| 17 | `isCombinedFlags` detects multi-char single-dash flags, `explainCombinedFlags` resolves via DB lookup first | Correctly handles both `-xzvf` (combined) and `-name` (single flag for find) | 2026-03-29 |
+| 18 | Generic `flagTakesValue` only applies to unknown flags; known DB flags never greedily consume next token | Prevents `-s` (silent in curl) from swallowing the URL argument | 2026-03-29 |
 
 ---
 
@@ -228,6 +239,9 @@
 | 5 | FTS5 OR queries fail if "OR" tokens are double-wrapped — store layer must sanitize, not re-wrap | Phase 2: FTS5 query handling between intelligence engine and vault |
 | 6 | Knowledge base FTS5 content-sync table needs explicit rebuild after batch insert via transaction | Phase 2: LoadKnowledgeBase calls RebuildKnowledgeFTSIndex after batch |
 | 7 | Stop word removal before synonym expansion prevents noise in FTS5 queries | Phase 2: intent.go tokenization pipeline |
+| 8 | Pipeline operator should be stored as trailing (after segment), not leading — rendering must emit after each segment, not before | Phase 3: parser.go splitPipeline |
+| 9 | Generic `flagTakesValue` heuristic must NOT override tool-specific flag database — known flags shouldn't greedily consume next token | Phase 3: parser.go flag handling |
+| 10 | `isCombinedFlags` matches multi-letter single-dash flags like `-name`, `-type` — must check flag database first in `explainCombinedFlags` to handle them correctly | Phase 3: parser.go combined flag detection |
 
 ---
 
@@ -240,6 +254,7 @@ _(Update this after each work session so the next session knows where we left of
 | 1 | 2026-03-25 | Created all documentation: README, 5 docs files, PROMPT.md, MEMORY.md, .gitignore, LICENSE, cursor rules. No code yet. | Start Phase 1: `go.mod`, `main.go`, Cobra skeleton |
 | 2 | 2026-03-28 | Built ENTIRE Phase 1 Foundation: Go scaffold, Cobra CLI (7 commands), SQLite vault with FTS5, capture pipeline (parser, filter, enricher, receiver), shell hooks (zsh+bash), config system (TOML), Lipgloss UI (theme + result cards), 30 tests. All passing. Pushed 8 commits to GitHub. | Start Phase 2: Intent extraction, multi-signal scoring, context detection, knowledge base |
 | 3 | 2026-03-29 | Built ENTIRE Phase 2 Intelligence: context detection (git, project, session, env), intent extraction with 80+ synonym entries, 5-signal scoring algorithm (text/intent/freq/context/recency), search orchestrator, pattern extraction, knowledge base loader + 200 curated commands, wired intelligence into search cmd. 49 tests all passing. Pushed to GitHub. | Start Phase 3: Explain + Compose — command decomposition, flag database, explain/compose commands |
+| 4 | 2026-03-29 | Built ENTIRE Phase 3 Explain + Compose: command decomposition engine with pipeline splitting, combined flag expansion, danger detection (3 levels: safe/caution/destructive), warnings & suggestions. Flag database covering 50+ CLI tools with flags, descriptions, danger levels, tips, subcommands. `recall explain` command with --short/--json/--no-warnings. `recall compose` interactive wizard for 9 tools + generic fallback. 22 explain tests (71 total). All passing. Pushed to GitHub. | Start Phase 4: UX Polish — Bubbletea TUI, vault browser, stats, aliases, hotkeys |
 
 ---
 
