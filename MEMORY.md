@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 3 — Explain + Compose (COMPLETE) |
-| **Last thing built** | Full Phase 3: command decomposition engine, flag database (50+ tools), explain command, compose wizard, danger detection, 22 explain tests |
-| **Next thing to build** | Phase 4 — UX Polish: Bubbletea TUI, vault browser, stats, aliases, hotkeys, Lipgloss formatting |
+| **Current Phase** | Phase 4 — UX Polish (COMPLETE) |
+| **Last thing built** | Full Phase 4: Bubbletea TUI vault browser, inline search TUI, stats command, suggest-aliases command, hotkey integration, Lipgloss formatting polish, 20+ new tests (80 total) |
+| **Next thing to build** | Phase 5 — Security + Export: AES-256 encryption, export/import, Fish support, config command |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -79,6 +79,19 @@
 - [x] `cmd/explain.go` — `recall explain` command with `--short`, `--json`, `--no-warnings` flags
 - [x] `cmd/compose.go` — `recall compose` interactive wizard (find, tar, grep, docker, git, curl, ssh, rsync, chmod + generic fallback)
 - [x] `tests/explain_test.go` — 22 explain tests (71 total across all test files)
+
+### Code — Phase 4 (COMPLETE)
+- [x] `go.mod` — Added bubbletea v1.3.10, bubbles v1.0.0 dependencies
+- [x] `internal/vault/store.go` — New methods: GetAllCommands, GetCommandsByCategory, DeleteCommand, GetCategories, GetTopCommands, GetRareCommands, GetVaultPeriod, GetHighFrequencyCommands, scanCommands helper
+- [x] `internal/vault/models.go` — Added CategoryCount type
+- [x] `internal/ui/theme.go` — Added TUI styles: ActiveTab, InactiveTab, SelectedItem, NormalItem, StatusBar, SearchInput, Badge, Dim, Accent, FrequencyBar, StatsHeader
+- [x] `internal/ui/vault_browser.go` — Full Bubbletea TUI: list/category/detail/help views, live FTS5 search, sort cycling, keybindings, delete, category browsing
+- [x] `internal/ui/search.go` — Interactive inline search TUI: live-as-you-type results, confidence scores, result selection
+- [x] `cmd/vault.go` — `recall vault` (alias: v) with --category, --sort, --project flags, alt-screen TUI
+- [x] `cmd/stats.go` — `recall stats` with --period, --json, --all flags, Lipgloss formatted output with frequency bars
+- [x] `cmd/suggest.go` — `recall suggest-aliases` (alias: sa) with smart alias generation, longest-prefix matching, --min-freq, --dry-run flags
+- [x] `pkg/shell/hooks.go` — Added Ctrl+Space (search), Ctrl+K (vault), Ctrl+E (explain) bindings for zsh and bash
+- [x] `tests/ui_test.go` — 20+ new tests: stats queries, alias generation, vault browser model, store operations (80 total)
 
 ---
 
@@ -147,14 +160,15 @@
 ### Phase 4 — UX Polish
 | Task | Status | File(s) |
 |------|--------|---------|
-| Vault browser TUI (Bubbletea) | NOT STARTED | `internal/ui/vault_browser.go` |
-| Search TUI (inline) | NOT STARTED | `internal/ui/search.go` |
-| `recall vault` command | NOT STARTED | `cmd/vault.go` |
-| `recall stats` command | NOT STARTED | `cmd/stats.go` |
-| `recall suggest-aliases` command | NOT STARTED | `cmd/suggest.go` |
-| Hotkey integration (Ctrl+Space) | NOT STARTED | `pkg/shell/hooks.go` |
-| Lipgloss formatting polish | NOT STARTED | `internal/ui/theme.go` |
-| **PHASE 4 COMPLETE** | **NO** | |
+| Vault browser TUI (Bubbletea) | DONE | `internal/ui/vault_browser.go` |
+| Search TUI (inline) | DONE | `internal/ui/search.go` |
+| `recall vault` command | DONE | `cmd/vault.go` |
+| `recall stats` command | DONE | `cmd/stats.go` |
+| `recall suggest-aliases` command | DONE | `cmd/suggest.go` |
+| Hotkey integration (Ctrl+Space, Ctrl+K, Ctrl+E) | DONE | `pkg/shell/hooks.go` |
+| Lipgloss formatting polish | DONE | `internal/ui/theme.go` |
+| Phase 4 tests | DONE | `tests/ui_test.go` |
+| **PHASE 4 COMPLETE** | **YES** | |
 
 ### Phase 5 — Security + Export
 | Task | Status | File(s) |
@@ -200,6 +214,9 @@
 | 16 | Flag database as Go map, not external file | Same rationale as synonyms — compiles into binary, zero I/O, fast lookups | 2026-03-29 |
 | 17 | `isCombinedFlags` detects multi-char single-dash flags, `explainCombinedFlags` resolves via DB lookup first | Correctly handles both `-xzvf` (combined) and `-name` (single flag for find) | 2026-03-29 |
 | 18 | Generic `flagTakesValue` only applies to unknown flags; known DB flags never greedily consume next token | Prevents `-s` (silent in curl) from swallowing the URL argument | 2026-03-29 |
+| 19 | Vault browser uses alt-screen mode (`tea.WithAltScreen`) for clean TUI experience | Doesn't pollute terminal scrollback | 2026-03-29 |
+| 20 | Alias suggestions use longest-prefix matching against curated alias map | Predictable, high-quality alias names; avoids random map iteration issues | 2026-03-29 |
+| 21 | Hotkeys: Ctrl+Space (search), Ctrl+K (vault), Ctrl+E (explain) in zsh and bash | Consistent with common editor/tool conventions | 2026-03-29 |
 
 ---
 
@@ -242,6 +259,8 @@
 | 8 | Pipeline operator should be stored as trailing (after segment), not leading — rendering must emit after each segment, not before | Phase 3: parser.go splitPipeline |
 | 9 | Generic `flagTakesValue` heuristic must NOT override tool-specific flag database — known flags shouldn't greedily consume next token | Phase 3: parser.go flag handling |
 | 10 | `isCombinedFlags` matches multi-letter single-dash flags like `-name`, `-type` — must check flag database first in `explainCombinedFlags` to handle them correctly | Phase 3: parser.go combined flag detection |
+| 11 | Alias suggestion must use longest-prefix matching against known alias map — Go map iteration is random, shorter prefixes match first otherwise | Phase 4: suggest.go longest prefix fix |
+| 12 | bubbletea + bubbles require `go get` of subpackages (e.g., bubbles/textinput) to appear in go.sum | Phase 4: dependency management |
 
 ---
 
@@ -255,6 +274,7 @@ _(Update this after each work session so the next session knows where we left of
 | 2 | 2026-03-28 | Built ENTIRE Phase 1 Foundation: Go scaffold, Cobra CLI (7 commands), SQLite vault with FTS5, capture pipeline (parser, filter, enricher, receiver), shell hooks (zsh+bash), config system (TOML), Lipgloss UI (theme + result cards), 30 tests. All passing. Pushed 8 commits to GitHub. | Start Phase 2: Intent extraction, multi-signal scoring, context detection, knowledge base |
 | 3 | 2026-03-29 | Built ENTIRE Phase 2 Intelligence: context detection (git, project, session, env), intent extraction with 80+ synonym entries, 5-signal scoring algorithm (text/intent/freq/context/recency), search orchestrator, pattern extraction, knowledge base loader + 200 curated commands, wired intelligence into search cmd. 49 tests all passing. Pushed to GitHub. | Start Phase 3: Explain + Compose — command decomposition, flag database, explain/compose commands |
 | 4 | 2026-03-29 | Built ENTIRE Phase 3 Explain + Compose: command decomposition engine with pipeline splitting, combined flag expansion, danger detection (3 levels: safe/caution/destructive), warnings & suggestions. Flag database covering 50+ CLI tools with flags, descriptions, danger levels, tips, subcommands. `recall explain` command with --short/--json/--no-warnings. `recall compose` interactive wizard for 9 tools + generic fallback. 22 explain tests (71 total). All passing. Pushed to GitHub. | Start Phase 4: UX Polish — Bubbletea TUI, vault browser, stats, aliases, hotkeys |
+| 5 | 2026-03-29 | Built ENTIRE Phase 4 UX Polish: Added bubbletea + bubbles deps. Built Bubbletea vault browser TUI (list/categories/details/help views, live search, sort cycling, delete, keybindings). Built inline search TUI with live-as-you-type results. `recall vault` (v), `recall stats`, `recall suggest-aliases` (sa) commands. Polished Lipgloss theme with 12 new styles. Added hotkey bindings (Ctrl+Space/K/E) for zsh + bash. Added 8 new Store methods for queries. 20+ new tests (80 total). All passing. | Start Phase 5: Security + Export — AES-256 encryption, export/import, Fish support |
 
 ---
 
