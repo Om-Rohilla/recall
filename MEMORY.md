@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 4 — UX Polish (COMPLETE) |
-| **Last thing built** | Full Phase 4: Bubbletea TUI vault browser, inline search TUI, stats command, suggest-aliases command, hotkey integration, Lipgloss formatting polish, 20+ new tests (80 total) |
-| **Next thing to build** | Phase 5 — Security + Export: AES-256 encryption, export/import, Fish support, config command |
+| **Current Phase** | Phase 5 — Security + Export (COMPLETE) |
+| **Last thing built** | Full Phase 5: AES-256-GCM encryption with Argon2id key derivation, recall export/import commands (encrypted + plain + merge), recall config command (show/set/get/reset/path), Fish shell hook with hotkeys, secure password input, 22 new tests (102 total) |
+| **Next thing to build** | Phase 6 — Release: GoReleaser, CI/CD, install script, expanded knowledge base |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -92,6 +92,18 @@
 - [x] `cmd/suggest.go` — `recall suggest-aliases` (alias: sa) with smart alias generation, longest-prefix matching, --min-freq, --dry-run flags
 - [x] `pkg/shell/hooks.go` — Added Ctrl+Space (search), Ctrl+K (vault), Ctrl+E (explain) bindings for zsh and bash
 - [x] `tests/ui_test.go` — 20+ new tests: stats queries, alias generation, vault browser model, store operations (80 total)
+
+### Code — Phase 5 (COMPLETE)
+- [x] `go.mod` — Added golang.org/x/crypto (argon2), golang.org/x/term dependencies
+- [x] `internal/vault/crypto.go` — AES-256-GCM encrypt/decrypt, Argon2id key derivation, salt generation, export file packing/unpacking (RECL magic header + version + salt + ciphertext)
+- [x] `internal/vault/terminal.go` — Secure password input (terminal echo suppression via x/term, stdin fallback)
+- [x] `internal/vault/models.go` — Added ExportData struct for JSON-serializable vault exports
+- [x] `internal/vault/store.go` — Added GetAllContexts, GetAllPatterns, ExportVaultData, ImportVaultData methods; fixed GetAllCommands limit=0 handling
+- [x] `cmd/export_cmd.go` — `recall export` (--output, --password, --plain, --commands-only) + `recall import` (--input, --password, --merge)
+- [x] `cmd/config_cmd.go` — `recall config` with show/set/get/reset/path subcommands, Lipgloss formatting, value validation
+- [x] `scripts/hooks/recall.fish` — Fish shell hook with postexec capture, session ID, duration, hotkey bindings
+- [x] `pkg/shell/hooks.go` — Updated fishHook() with production-ready implementation + Fish hotkey bindings (Ctrl+Space/K/E)
+- [x] `tests/security_test.go` — 22 tests: crypto roundtrip, key derivation, tamper detection, export/import, config ops, Fish hook validation (102 total)
 
 ---
 
@@ -173,13 +185,17 @@
 ### Phase 5 — Security + Export
 | Task | Status | File(s) |
 |------|--------|---------|
-| AES-256-GCM encryption | NOT STARTED | `internal/vault/crypto.go` |
-| Argon2id key derivation | NOT STARTED | `internal/vault/crypto.go` |
-| `recall export` command | NOT STARTED | `cmd/export_cmd.go` |
-| `recall import` command | NOT STARTED | `cmd/export_cmd.go` |
-| `recall config` command | NOT STARTED | `cmd/config_cmd.go` |
-| Fish shell hook | NOT STARTED | `scripts/hooks/recall.fish` |
-| **PHASE 5 COMPLETE** | **NO** | |
+| AES-256-GCM encryption | DONE | `internal/vault/crypto.go` |
+| Argon2id key derivation | DONE | `internal/vault/crypto.go` |
+| Secure password input | DONE | `internal/vault/terminal.go` |
+| `recall export` command | DONE | `cmd/export_cmd.go` |
+| `recall import` command | DONE | `cmd/export_cmd.go` |
+| `recall config` command | DONE | `cmd/config_cmd.go` |
+| Fish shell hook | DONE | `scripts/hooks/recall.fish`, `pkg/shell/hooks.go` |
+| Vault export/import store methods | DONE | `internal/vault/store.go` |
+| ExportData model | DONE | `internal/vault/models.go` |
+| Phase 5 tests | DONE | `tests/security_test.go` |
+| **PHASE 5 COMPLETE** | **YES** | |
 
 ### Phase 6 — Release
 | Task | Status | File(s) |
@@ -217,6 +233,11 @@
 | 19 | Vault browser uses alt-screen mode (`tea.WithAltScreen`) for clean TUI experience | Doesn't pollute terminal scrollback | 2026-03-29 |
 | 20 | Alias suggestions use longest-prefix matching against curated alias map | Predictable, high-quality alias names; avoids random map iteration issues | 2026-03-29 |
 | 21 | Hotkeys: Ctrl+Space (search), Ctrl+K (vault), Ctrl+E (explain) in zsh and bash | Consistent with common editor/tool conventions | 2026-03-29 |
+| 22 | Export format: magic "RECL" + version byte + 32-byte salt + nonce+ciphertext | Self-describing format, easy to detect vs plain JSON, forward-compatible with version byte | 2026-03-29 |
+| 23 | Argon2id params: time=3, memory=64MB, threads=4 | Balanced security vs UX — fast enough for interactive use, strong enough against brute force | 2026-03-29 |
+| 24 | Phase 5 encryption is export/import only, not vault DB at rest | Auto-encrypting SQLite DB is complex (page-level encryption), deferred to Phase 6+ | 2026-03-29 |
+| 25 | Secure password input uses golang.org/x/term with bufio fallback | Handles both interactive terminals and piped input (CI, scripts) | 2026-03-29 |
+| 26 | Fish hook uses fish_postexec event + CMD_DURATION builtin | Fish provides duration natively in ms, no manual timing needed unlike zsh/bash | 2026-03-29 |
 
 ---
 
@@ -261,6 +282,10 @@
 | 10 | `isCombinedFlags` matches multi-letter single-dash flags like `-name`, `-type` — must check flag database first in `explainCombinedFlags` to handle them correctly | Phase 3: parser.go combined flag detection |
 | 11 | Alias suggestion must use longest-prefix matching against known alias map — Go map iteration is random, shorter prefixes match first otherwise | Phase 4: suggest.go longest prefix fix |
 | 12 | bubbletea + bubbles require `go get` of subpackages (e.g., bubbles/textinput) to appear in go.sum | Phase 4: dependency management |
+| 13 | GetAllCommands with limit=0 must mean "no limit" — conditional SQL query needed | Phase 5: ExportVaultData was getting 0 commands because LIMIT 0 returns nothing |
+| 14 | Export file format needs magic header for detection — `RECL` + version byte allows forward compatibility | Phase 5: crypto.go PackExport/UnpackExport |
+| 15 | ImportVaultData needs context ID remapping — imported commands reference context IDs from the source vault | Phase 5: store.go ImportVaultData builds oldID→newID map |
+| 16 | fmt.Errorf with %s format verb requires matching argument — caught by `go vet` in config_cmd.go | Phase 5: config_cmd.go validateAndSet error message |
 
 ---
 
@@ -275,6 +300,7 @@ _(Update this after each work session so the next session knows where we left of
 | 3 | 2026-03-29 | Built ENTIRE Phase 2 Intelligence: context detection (git, project, session, env), intent extraction with 80+ synonym entries, 5-signal scoring algorithm (text/intent/freq/context/recency), search orchestrator, pattern extraction, knowledge base loader + 200 curated commands, wired intelligence into search cmd. 49 tests all passing. Pushed to GitHub. | Start Phase 3: Explain + Compose — command decomposition, flag database, explain/compose commands |
 | 4 | 2026-03-29 | Built ENTIRE Phase 3 Explain + Compose: command decomposition engine with pipeline splitting, combined flag expansion, danger detection (3 levels: safe/caution/destructive), warnings & suggestions. Flag database covering 50+ CLI tools with flags, descriptions, danger levels, tips, subcommands. `recall explain` command with --short/--json/--no-warnings. `recall compose` interactive wizard for 9 tools + generic fallback. 22 explain tests (71 total). All passing. Pushed to GitHub. | Start Phase 4: UX Polish — Bubbletea TUI, vault browser, stats, aliases, hotkeys |
 | 5 | 2026-03-29 | Built ENTIRE Phase 4 UX Polish: Added bubbletea + bubbles deps. Built Bubbletea vault browser TUI (list/categories/details/help views, live search, sort cycling, delete, keybindings). Built inline search TUI with live-as-you-type results. `recall vault` (v), `recall stats`, `recall suggest-aliases` (sa) commands. Polished Lipgloss theme with 12 new styles. Added hotkey bindings (Ctrl+Space/K/E) for zsh + bash. Added 8 new Store methods for queries. 20+ new tests (80 total). All passing. | Start Phase 5: Security + Export — AES-256 encryption, export/import, Fish support |
+| 6 | 2026-03-29 | Built ENTIRE Phase 5 Security + Export: AES-256-GCM encryption with Argon2id key derivation (crypto.go). Secure password input with terminal echo suppression (terminal.go). Export/import commands with encrypted+plain+merge modes (export_cmd.go). Config command with show/set/get/reset/path subcommands and validation (config_cmd.go). Fish shell hook with postexec capture + hotkeys (recall.fish, hooks.go). ExportData model + vault store export/import methods. 22 new tests (102 total). All passing. | Start Phase 6: Release — GoReleaser, CI/CD, install script, expanded knowledge base |
 
 ---
 
