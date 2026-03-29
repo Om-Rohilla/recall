@@ -110,7 +110,10 @@ func (s *Store) SearchFTS5(query string, limit int) ([]SearchResult, error) {
 		limit = 10
 	}
 
-	ftsQuery := buildFTSQuery(query)
+	ftsQuery := sanitizeFTSQuery(query)
+	if ftsQuery == "" {
+		return nil, nil
+	}
 
 	rows, err := s.db.Query(
 		`SELECT c.id, c.raw, c.binary_name, c.subcommand, c.flags, c.category,
@@ -268,7 +271,7 @@ func (s *Store) SearchKnowledgeFTS5(query string, limit int) ([]Knowledge, error
 		limit = 20
 	}
 
-	ftsQuery := buildFTSQuery(query)
+	ftsQuery := sanitizeFTSQuery(query)
 	if ftsQuery == "" {
 		return nil, nil
 	}
@@ -394,34 +397,63 @@ func (s *Store) GetMaxFrequency() (int, error) {
 	return maxFreq, nil
 }
 
-// buildFTSQuery converts a natural language query into an FTS5 query.
-// Splits on spaces and OR-joins the terms.
-func buildFTSQuery(query string) string {
+// sanitizeFTSQuery ensures a query string is safe for FTS5.
+// Accepts pre-built FTS5 queries (with OR operators) or simple terms.
+func sanitizeFTSQuery(query string) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return ""
 	}
 
 	words := strings.Fields(query)
-	var terms []string
+	var cleaned []string
 	for _, w := range words {
-		cleaned := strings.Map(func(r rune) rune {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' {
+		if strings.EqualFold(w, "OR") || strings.EqualFold(w, "AND") || strings.EqualFold(w, "NOT") {
+			cleaned = append(cleaned, strings.ToUpper(w))
+			continue
+		}
+		term := strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' || r == '*' {
 				return r
 			}
 			return -1
 		}, w)
-		if cleaned != "" {
-			terms = append(terms, cleaned)
+		if term != "" {
+			cleaned = append(cleaned, term)
 		}
 	}
 
-	if len(terms) == 0 {
+	if len(cleaned) == 0 {
 		return ""
 	}
 
-	// Use OR so any matching term surfaces results
-	return strings.Join(terms, " OR ")
+	// Remove leading/trailing operators and consecutive operators
+	var result []string
+	prevOp := true
+	for _, c := range cleaned {
+		isOp := c == "OR" || c == "AND" || c == "NOT"
+		if isOp && prevOp {
+			continue
+		}
+		result = append(result, c)
+		prevOp = isOp
+	}
+
+	// Trim trailing operator
+	for len(result) > 0 {
+		last := result[len(result)-1]
+		if last == "OR" || last == "AND" || last == "NOT" {
+			result = result[:len(result)-1]
+		} else {
+			break
+		}
+	}
+
+	if len(result) == 0 {
+		return ""
+	}
+
+	return strings.Join(result, " ")
 }
 
 // scoreToConfidence maps FTS5 rank + frequency to a 0-100 confidence percentage.
