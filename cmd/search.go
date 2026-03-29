@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	appctx "github.com/Om-Rohilla/recall/internal/context"
+	"github.com/Om-Rohilla/recall/internal/intelligence"
 	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
@@ -17,6 +19,7 @@ var (
 	searchNoExec    bool
 	searchJSON      bool
 	searchVaultOnly bool
+	searchKBOnly    bool
 	searchCategory  string
 )
 
@@ -41,12 +44,11 @@ func init() {
 	searchCmd.Flags().BoolVar(&searchNoExec, "no-execute", false, "show result without execute option")
 	searchCmd.Flags().BoolVar(&searchJSON, "json", false, "output as JSON")
 	searchCmd.Flags().BoolVar(&searchVaultOnly, "vault-only", false, "search only personal history")
+	searchCmd.Flags().BoolVar(&searchKBOnly, "kb-only", false, "search only knowledge base")
 	searchCmd.Flags().StringVar(&searchCategory, "category", "", "filter by category")
 	rootCmd.AddCommand(searchCmd)
 }
 
-// runSearch is called when the first arg isn't a known subcommand.
-// This replaces the stub in root.go.
 func runSearch(args []string) error {
 	return executeSearch(args)
 }
@@ -69,35 +71,33 @@ func executeSearch(args []string) error {
 	}
 	defer store.Close()
 
-	results, err := store.SearchFTS5(query, topN+10) // fetch extra for filtering
-	if err != nil {
-		return fmt.Errorf("searching vault: %w", err)
+	cwd, _ := os.Getwd()
+	currentCtx := appctx.Detect(cwd)
+
+	kbPath := intelligence.FindKnowledgeBasePath()
+
+	opts := intelligence.SearchOptions{
+		Limit:     topN,
+		VaultOnly: searchVaultOnly,
+		KBOnly:    searchKBOnly,
+		Category:  searchCategory,
+		KBPath:    kbPath,
 	}
 
-	// Filter by category if specified
-	if searchCategory != "" {
-		var filtered []vault.SearchResult
-		for _, r := range results {
-			if strings.EqualFold(r.Command.Category, searchCategory) {
-				filtered = append(filtered, r)
-			}
-		}
-		results = filtered
+	results, err := intelligence.Search(store, query, currentCtx, opts)
+	if err != nil {
+		return fmt.Errorf("searching: %w", err)
 	}
 
 	// Filter by minimum confidence
+	minConf := cfg.Search.MinConfidence * 100
 	var filtered []vault.SearchResult
 	for _, r := range results {
-		if r.Confidence >= cfg.Search.MinConfidence*100 {
+		if r.Confidence >= minConf {
 			filtered = append(filtered, r)
 		}
 	}
 	results = filtered
-
-	// Limit to topN
-	if len(results) > topN {
-		results = results[:topN]
-	}
 
 	if len(results) == 0 {
 		fmt.Println(ui.RenderNoResults(query))
