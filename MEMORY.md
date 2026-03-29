@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 1 — Foundation (COMPLETE) |
-| **Last thing built** | Full Phase 1: scaffold, vault, capture, shell hooks, CLI commands, UI, tests |
-| **Next thing to build** | Phase 2 — Intelligence: intent extraction, multi-signal scoring, context detection, knowledge base |
+| **Current Phase** | Phase 2 — Intelligence (COMPLETE) |
+| **Last thing built** | Full Phase 2: intelligence layer, context detection, knowledge base, scoring pipeline, tests |
+| **Next thing to build** | Phase 3 — Explain + Compose: command decomposition, flag database, explain/compose commands |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -57,6 +57,21 @@
 - [x] `pkg/shell/` — detect, hooks, install
 - [x] `scripts/hooks/` — recall.zsh, recall.bash
 - [x] `tests/` — 30 table-driven tests (vault + capture)
+
+### Code — Phase 2 (COMPLETE)
+- [x] `internal/context/git.go` — Git state detection (repo, branch, dirty)
+- [x] `internal/context/project.go` — Project type detection (25+ markers, framework detection)
+- [x] `internal/context/session.go` — Session tracking (recent commands, categories)
+- [x] `internal/context/detector.go` — Context aggregator (cwd, git, project, environment)
+- [x] `internal/intelligence/intent.go` — Intent extraction + synonym dictionary (80+ synonym entries)
+- [x] `internal/intelligence/scorer.go` — Multi-signal scoring (text 30%, intent 25%, freq 20%, context 15%, recency 10%)
+- [x] `internal/intelligence/engine.go` — 4-stage search orchestrator (intent → candidates → score → rank)
+- [x] `internal/intelligence/patterns.go` — Pattern/template extraction (URL, path, hash, IP placeholders)
+- [x] `internal/intelligence/knowledge.go` — Knowledge base loader (JSON → SQLite)
+- [x] `data/knowledge.json` — 200 curated commands across 12 categories
+- [x] `internal/vault/store.go` — Added knowledge CRUD, context queries, max frequency, FTS5 query sanitization
+- [x] `cmd/search.go` — Wired intelligence pipeline (replaces raw FTS5 with full scoring)
+- [x] `tests/intelligence_test.go` — 20 new tests (49 total)
 
 ---
 
@@ -96,19 +111,21 @@
 ### Phase 2 — Intelligence
 | Task | Status | File(s) |
 |------|--------|---------|
-| Intent extraction engine | NOT STARTED | `internal/intelligence/intent.go` |
-| Synonym dictionary | NOT STARTED | `internal/intelligence/intent.go` |
-| Multi-signal scoring algorithm | NOT STARTED | `internal/intelligence/scorer.go` |
-| Search orchestrator | NOT STARTED | `internal/intelligence/engine.go` |
-| Pattern extraction | NOT STARTED | `internal/intelligence/patterns.go` |
-| Knowledge base loader | NOT STARTED | `internal/intelligence/knowledge.go` |
-| Knowledge base data (200 cmds) | NOT STARTED | `data/knowledge.json` |
-| Git context detection | NOT STARTED | `internal/context/git.go` |
-| Project type detection | NOT STARTED | `internal/context/project.go` |
-| Session tracking | NOT STARTED | `internal/context/session.go` |
-| Context aggregator | NOT STARTED | `internal/context/detector.go` |
-| Intelligence tests | NOT STARTED | `tests/intelligence_test.go` |
-| **PHASE 2 COMPLETE** | **NO** | |
+| Intent extraction engine | DONE | `internal/intelligence/intent.go` |
+| Synonym dictionary | DONE | `internal/intelligence/intent.go` |
+| Multi-signal scoring algorithm | DONE | `internal/intelligence/scorer.go` |
+| Search orchestrator | DONE | `internal/intelligence/engine.go` |
+| Pattern extraction | DONE | `internal/intelligence/patterns.go` |
+| Knowledge base loader | DONE | `internal/intelligence/knowledge.go` |
+| Knowledge base data (200 cmds) | DONE | `data/knowledge.json` |
+| Git context detection | DONE | `internal/context/git.go` |
+| Project type detection | DONE | `internal/context/project.go` |
+| Session tracking | DONE | `internal/context/session.go` |
+| Context aggregator | DONE | `internal/context/detector.go` |
+| Intelligence tests | DONE | `tests/intelligence_test.go` |
+| Wire into search command | DONE | `cmd/search.go` |
+| Vault knowledge methods | DONE | `internal/vault/store.go` |
+| **PHASE 2 COMPLETE** | **YES** | |
 
 ### Phase 3 — Explain + Compose
 | Task | Status | File(s) |
@@ -168,6 +185,10 @@
 | 8 | Phase 1 uses `recall capture` subcommand instead of Unix socket | Simpler, fast enough (<1ms), socket can be added in Phase 2 if needed | 2026-03-28 |
 | 9 | Phase 1 FTS5 search uses OR-joined terms | Simple but effective for keyword matching; Phase 2 adds intent expansion | 2026-03-28 |
 | 10 | Column named `binary_name` not `binary` in schema | `binary` is a reserved word in some SQL contexts | 2026-03-28 |
+| 11 | Synonym dict as Go map, not external file | Faster, no file I/O, compiles into binary, easy to extend | 2026-03-29 |
+| 12 | FTS5 query sanitization in store layer | Prevents double-processing when intelligence engine builds queries | 2026-03-29 |
+| 13 | Log-normalized frequency scoring | Prevents power-law dominance by very high-frequency commands | 2026-03-29 |
+| 14 | Context scoring uses best-match across all contexts for a command | More accurate than averaging — a command used once in matching context should score high | 2026-03-29 |
 
 ---
 
@@ -204,6 +225,9 @@
 | 2 | FTS5 triggers must be created after the virtual table | Phase 1: schema.go creation order matters |
 | 3 | Use `ON CONFLICT(raw) DO UPDATE` for batch imports — much cleaner than check-then-insert | Phase 1: store.go BatchInsertCommands |
 | 4 | Parser classifies `npm install express` as subcommand="install express" since npm is a multi-cmd tool — acceptable for Phase 1, refine in Phase 2 | Phase 1: parser tests |
+| 5 | FTS5 OR queries fail if "OR" tokens are double-wrapped — store layer must sanitize, not re-wrap | Phase 2: FTS5 query handling between intelligence engine and vault |
+| 6 | Knowledge base FTS5 content-sync table needs explicit rebuild after batch insert via transaction | Phase 2: LoadKnowledgeBase calls RebuildKnowledgeFTSIndex after batch |
+| 7 | Stop word removal before synonym expansion prevents noise in FTS5 queries | Phase 2: intent.go tokenization pipeline |
 
 ---
 
@@ -215,6 +239,7 @@ _(Update this after each work session so the next session knows where we left of
 |---------|------|--------------|-------------|
 | 1 | 2026-03-25 | Created all documentation: README, 5 docs files, PROMPT.md, MEMORY.md, .gitignore, LICENSE, cursor rules. No code yet. | Start Phase 1: `go.mod`, `main.go`, Cobra skeleton |
 | 2 | 2026-03-28 | Built ENTIRE Phase 1 Foundation: Go scaffold, Cobra CLI (7 commands), SQLite vault with FTS5, capture pipeline (parser, filter, enricher, receiver), shell hooks (zsh+bash), config system (TOML), Lipgloss UI (theme + result cards), 30 tests. All passing. Pushed 8 commits to GitHub. | Start Phase 2: Intent extraction, multi-signal scoring, context detection, knowledge base |
+| 3 | 2026-03-29 | Built ENTIRE Phase 2 Intelligence: context detection (git, project, session, env), intent extraction with 80+ synonym entries, 5-signal scoring algorithm (text/intent/freq/context/recency), search orchestrator, pattern extraction, knowledge base loader + 200 curated commands, wired intelligence into search cmd. 49 tests all passing. Pushed to GitHub. | Start Phase 3: Explain + Compose — command decomposition, flag database, explain/compose commands |
 
 ---
 
