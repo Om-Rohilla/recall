@@ -1,0 +1,73 @@
+version: 2
+
+project_name: recall
+
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+
+builds:
+  - main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
+      - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - scripts/hooks/recall.zsh
+      - scripts/hooks/recall.bash
+      - scripts/hooks/recall.fish
+      - data/knowledge.json
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "^style:"
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - repository:
+      owner: Om-Rohilla
+      name: homebrew-tap
+    name: recall
+    homepage: "https://github.com/Om-Rohilla/recall"
+    description: "100% offline command intelligence for your terminal"
+    license: "MIT"
+    install: |
+      bin.install "recall"
+    test: |
+      system "#{bin}/recall", "version"
+
+release:
+  github:
+    owner: Om-Rohilla
+    name: recall
+  name_template: "v{{.Version}}"

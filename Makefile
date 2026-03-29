@@ -4,7 +4,7 @@ VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_DATE=$(shell date -u '+%Y-%m-%d')
 LDFLAGS=-ldflags "-X github.com/Om-Rohilla/recall/cmd.Version=$(VERSION) -X github.com/Om-Rohilla/recall/cmd.BuildDate=$(BUILD_DATE)"
 
-.PHONY: build test clean install lint vet fmt
+.PHONY: build test clean install lint vet fmt snapshot release-dry-run coverage
 
 build:
 	@mkdir -p $(BUILD_DIR)
@@ -32,3 +32,13 @@ lint: vet
 
 run:
 	go run . $(ARGS)
+
+snapshot:
+	goreleaser release --snapshot --clean
+
+release-dry-run:
+	goreleaser check
+
+coverage:
+	go test ./... -coverprofile=coverage.out
+	go tool cover -html=coverage.out
