@@ -166,10 +166,18 @@ func generateAliasName(raw, binary, subcommand string) string {
 		"python":                       "py",
 	}
 
+	bestAlias := ""
+	bestLen := 0
 	for prefix, alias := range knownAliases {
 		if raw == prefix || strings.HasPrefix(raw, prefix+" ") {
-			return alias
+			if len(prefix) > bestLen {
+				bestLen = len(prefix)
+				bestAlias = alias
+			}
 		}
+	}
+	if bestAlias != "" {
+		return bestAlias
 	}
 
 	parts := strings.Fields(raw)
