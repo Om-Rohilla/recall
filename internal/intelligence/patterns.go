@@ -20,6 +20,10 @@ var (
 // ExtractPattern converts a concrete command into a template by replacing
 // variable parts (paths, URLs, hashes, etc.) with placeholders.
 func ExtractPattern(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
 	template := raw
 
 	template = urlPattern.ReplaceAllString(template, "{url}")
