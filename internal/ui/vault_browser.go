@@ -60,6 +60,9 @@ type VaultBrowserModel struct {
 	selectedCmd    *vault.Command
 	selectedCtxs   []vault.Context
 
+	confirmDelete  bool
+	deleteTargetID int64
+
 	ready   bool
 	quitting bool
 }
@@ -165,6 +168,20 @@ func (m VaultBrowserModel) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 }
 
 func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmDelete {
+		switch msg.String() {
+		case "y", "Y":
+			_ = m.store.DeleteCommand(m.deleteTargetID)
+			m.confirmDelete = false
+			m.deleteTargetID = 0
+			return m, loadCommands(m.store, m.sort, m.filterCategory)
+		default:
+			m.confirmDelete = false
+			m.deleteTargetID = 0
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
@@ -290,10 +307,11 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 	case "d":
 		if m.view == viewList && len(m.filtered) > 0 && m.cursor < len(m.filtered) {
 			cmd := m.filtered[m.cursor]
-			_ = m.store.DeleteCommand(cmd.ID)
-			return m, loadCommands(m.store, m.sort, m.filterCategory)
+			m.confirmDelete = true
+			m.deleteTargetID = cmd.ID
 		}
 		return m, nil
+
 
 	case "s":
 		switch m.sort {
@@ -620,7 +638,9 @@ func (m VaultBrowserModel) renderHelp() string {
 
 func (m VaultBrowserModel) renderStatusBar() string {
 	left := ""
-	if m.searching {
+	if m.confirmDelete {
+		left = ErrorStyle.Render(" Delete this command? [y] Yes  [n] No")
+	} else if m.searching {
 		left = HintStyle.Render(" [Esc] Cancel search  [Enter] Apply")
 	} else {
 		left = HintStyle.Render(" [/] Search  [Tab] Switch view  [s] Sort  [i] Details  [d] Delete  [?] Help  [q] Quit")

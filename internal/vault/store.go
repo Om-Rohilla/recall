@@ -1,7 +1,9 @@
 package vault
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,17 +14,52 @@ import (
 )
 
 type Store struct {
-	db   *sql.DB
-	path string
+	db       *sql.DB
+	path     string
+	encKey   []byte
+	tempPath string
 }
 
 func NewStore(dbPath string) (*Store, error) {
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating vault directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	encPath := dbPath + ".enc"
+	var encKey []byte
+	var workingPath string
+
+	if keyHex := os.Getenv("RECALL_VAULT_KEY"); keyHex != "" {
+		var err error
+		encKey, err = hex.DecodeString(keyHex)
+		if err != nil || len(encKey) != KeySize {
+			return nil, fmt.Errorf("RECALL_VAULT_KEY must be a %d-byte hex string (%d hex chars)", KeySize, KeySize*2)
+		}
+
+		if _, err := os.Stat(encPath); err == nil {
+			encData, err := os.ReadFile(encPath)
+			if err != nil {
+				return nil, fmt.Errorf("reading encrypted vault: %w", err)
+			}
+			plainData, err := Decrypt(encData, encKey)
+			if err != nil {
+				return nil, fmt.Errorf("decrypting vault: %w", err)
+			}
+			workingPath = dbPath + ".tmp." + randomHex(8)
+			if err := os.WriteFile(workingPath, plainData, 0o600); err != nil {
+				return nil, fmt.Errorf("writing decrypted vault: %w", err)
+			}
+		} else if _, err := os.Stat(dbPath); err == nil {
+			workingPath = dbPath
+		} else {
+			workingPath = dbPath + ".tmp." + randomHex(8)
+		}
+	} else {
+		workingPath = dbPath
+	}
+
+	db, err := sql.Open("sqlite", workingPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening vault database: %w", err)
 	}
@@ -34,11 +71,77 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("initializing schema: %w", err)
 	}
 
-	return &Store{db: db, path: dbPath}, nil
+	if workingPath == dbPath {
+		if err := os.Chmod(dbPath, 0o600); err != nil && !os.IsNotExist(err) {
+			db.Close()
+			return nil, fmt.Errorf("setting vault file permissions: %w", err)
+		}
+	}
+
+	s := &Store{db: db, path: dbPath}
+	if encKey != nil {
+		s.encKey = encKey
+		s.tempPath = workingPath
+	}
+	return s, nil
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func (s *Store) Close() error {
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return err
+	}
+
+	if s.encKey != nil && s.tempPath != "" {
+		plainData, err := os.ReadFile(s.tempPath)
+		if err != nil {
+			return fmt.Errorf("reading vault for encryption: %w", err)
+		}
+		encData, err := Encrypt(plainData, s.encKey)
+		if err != nil {
+			return fmt.Errorf("encrypting vault: %w", err)
+		}
+		encPath := s.path + ".enc"
+		if err := os.WriteFile(encPath, encData, 0o600); err != nil {
+			return fmt.Errorf("writing encrypted vault: %w", err)
+		}
+		secureDelete(s.tempPath)
+		for _, suffix := range []string{"-wal", "-shm"} {
+			secureDelete(s.tempPath + suffix)
+		}
+	}
+
+	return nil
+}
+
+func secureDelete(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	size := info.Size()
+	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+		zeros := make([]byte, 4096)
+		for written := int64(0); written < size; {
+			n := size - written
+			if n > int64(len(zeros)) {
+				n = int64(len(zeros))
+			}
+			w, err := f.Write(zeros[:n])
+			if err != nil {
+				break
+			}
+			written += int64(w)
+		}
+		f.Sync()
+		f.Close()
+	}
+	os.Remove(path)
 }
 
 func (s *Store) DB() *sql.DB {
@@ -413,7 +516,7 @@ func sanitizeFTSQuery(query string) string {
 			continue
 		}
 		term := strings.Map(func(r rune) rune {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' || r == '*' {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' {
 				return r
 			}
 			return -1
@@ -457,28 +560,32 @@ func sanitizeFTSQuery(query string) string {
 }
 
 func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
-	orderClause := "last_seen DESC"
-	switch sortBy {
-	case "frequency":
-		orderClause = "frequency DESC"
-	case "alpha":
-		orderClause = "raw ASC"
-	case "recency":
-		orderClause = "last_seen DESC"
-	}
+	const baseQuery = `SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration FROM commands`
+
 	var rows *sql.Rows
 	var err error
-	if limit <= 0 {
-		rows, err = s.db.Query(
-			fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
-			 FROM commands ORDER BY %s`, orderClause),
-		)
-	} else {
-		rows, err = s.db.Query(
-			fmt.Sprintf(`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
-			 FROM commands ORDER BY %s LIMIT ?`, orderClause), limit,
-		)
+
+	switch sortBy {
+	case "frequency":
+		if limit <= 0 {
+			rows, err = s.db.Query(baseQuery + ` ORDER BY frequency DESC`)
+		} else {
+			rows, err = s.db.Query(baseQuery+` ORDER BY frequency DESC LIMIT ?`, limit)
+		}
+	case "alpha":
+		if limit <= 0 {
+			rows, err = s.db.Query(baseQuery + ` ORDER BY raw ASC`)
+		} else {
+			rows, err = s.db.Query(baseQuery+` ORDER BY raw ASC LIMIT ?`, limit)
+		}
+	default:
+		if limit <= 0 {
+			rows, err = s.db.Query(baseQuery + ` ORDER BY last_seen DESC`)
+		} else {
+			rows, err = s.db.Query(baseQuery+` ORDER BY last_seen DESC LIMIT ?`, limit)
+		}
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("getting all commands: %w", err)
 	}
@@ -761,6 +868,7 @@ func (s *Store) ImportVaultData(data *ExportData, merge bool) (importedCmds, imp
 }
 
 // scoreToConfidence maps FTS5 rank + frequency to a 0-100 confidence percentage.
+// Used by SearchFTS5 for direct FTS queries that bypass the intelligence scoring pipeline.
 func scoreToConfidence(ftsScore float64, frequency int) float64 {
 	textScore := ftsScore / (ftsScore + 1.0)
 	freqBoost := float64(frequency) / (float64(frequency) + 10.0)

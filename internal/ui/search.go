@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,8 @@ import (
 	"github.com/Om-Rohilla/recall/internal/vault"
 )
 
+const searchDebounceMs = 150
+
 type SearchModel struct {
 	store   *vault.Store
 	input   textinput.Model
@@ -21,10 +24,17 @@ type SearchModel struct {
 	width   int
 	height  int
 
-	selected *vault.SearchResult
-	quitting bool
-	ready    bool
-	kbPath   string
+	selected     *vault.SearchResult
+	quitting     bool
+	ready        bool
+	kbPath       string
+	pendingQuery string
+	debounceID   int
+}
+
+type debounceTickMsg struct {
+	id    int
+	query string
 }
 
 func NewSearchModel(store *vault.Store, kbPath string) SearchModel {
@@ -74,11 +84,24 @@ func (m SearchModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
+func (m SearchModel) scheduleDebounce(query string) tea.Cmd {
+	id := m.debounceID
+	return tea.Tick(time.Duration(searchDebounceMs)*time.Millisecond, func(t time.Time) tea.Msg {
+		return debounceTickMsg{id: id, query: query}
+	})
+}
+
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
+
+	case debounceTickMsg:
+		if msg.id == m.debounceID && msg.query == m.input.Value() {
+			return m, doSearch(m.store, msg.query, m.kbPath)
+		}
 		return m, nil
 
 	case searchResultsMsg:
@@ -131,7 +154,9 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
-			return m, tea.Batch(cmd, doSearch(m.store, m.input.Value(), m.kbPath))
+			m.debounceID++
+			m.pendingQuery = m.input.Value()
+			return m, tea.Batch(cmd, m.scheduleDebounce(m.pendingQuery))
 		}
 	}
 

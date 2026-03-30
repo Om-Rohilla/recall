@@ -46,9 +46,13 @@ type AliasConfig struct {
 var (
 	globalConfig *Config
 	configOnce   sync.Once
+	configMu     sync.Mutex
 )
 
 func Load() (*Config, error) {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	var loadErr error
 	configOnce.Do(func() {
 		globalConfig, loadErr = loadFromDisk()
@@ -61,18 +65,24 @@ func Load() (*Config, error) {
 
 // Get returns the loaded config or defaults if not yet loaded.
 func Get() *Config {
-	if globalConfig != nil {
-		return globalConfig
+	configMu.Lock()
+	cfg := globalConfig
+	configMu.Unlock()
+
+	if cfg != nil {
+		return cfg
 	}
-	cfg, err := Load()
-	if err != nil || cfg == nil {
+	loaded, err := Load()
+	if err != nil || loaded == nil {
 		return DefaultConfig()
 	}
-	return cfg
+	return loaded
 }
 
 // Reset clears the cached config so the next Load() re-reads from disk.
 func Reset() {
+	configMu.Lock()
+	defer configMu.Unlock()
 	globalConfig = nil
 	configOnce = sync.Once{}
 }

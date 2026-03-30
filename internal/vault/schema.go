@@ -11,6 +11,8 @@ const createSchema = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 5000;
+PRAGMA secure_delete = ON;
+PRAGMA auto_vacuum = INCREMENTAL;
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -130,6 +132,18 @@ CREATE TRIGGER IF NOT EXISTS knowledge_au AFTER UPDATE ON knowledge BEGIN
 END;
 `
 
+type migration struct {
+	version int
+	sql     string
+}
+
+var migrations = []migration{
+	{
+		version: 2,
+		sql:     `PRAGMA secure_delete = ON; PRAGMA auto_vacuum = INCREMENTAL;`,
+	},
+}
+
 func initSchema(db *sql.DB) error {
 	if _, err := db.Exec(createSchema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
@@ -159,6 +173,31 @@ func initSchema(db *sql.DB) error {
 	if count == 0 {
 		if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion); err != nil {
 			return fmt.Errorf("inserting schema version: %w", err)
+		}
+	}
+
+	if err := runMigrations(db); err != nil {
+		return fmt.Errorf("running migrations: %w", err)
+	}
+
+	return nil
+}
+
+func runMigrations(db *sql.DB) error {
+	var currentVersion int
+	if err := db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&currentVersion); err != nil {
+		return fmt.Errorf("reading schema version: %w", err)
+	}
+
+	for _, m := range migrations {
+		if m.version <= currentVersion {
+			continue
+		}
+		if _, err := db.Exec(m.sql); err != nil {
+			return fmt.Errorf("migration v%d: %w", m.version, err)
+		}
+		if _, err := db.Exec("UPDATE schema_version SET version = ?", m.version); err != nil {
+			return fmt.Errorf("updating schema version to %d: %w", m.version, err)
 		}
 	}
 

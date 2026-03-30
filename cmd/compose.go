@@ -2,12 +2,17 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/Om-Rohilla/recall/internal/capture"
 	"github.com/Om-Rohilla/recall/internal/explain"
 	"github.com/Om-Rohilla/recall/internal/ui"
+	"github.com/Om-Rohilla/recall/internal/vault"
+	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -616,7 +621,7 @@ func runGenericCompose(reader *bufio.Reader, tool string) error {
 	return nil
 }
 
-// finishCompose shows the composed command and offers actions.
+// finishCompose shows the composed command, saves to vault, and offers actions.
 func finishCompose(reader *bufio.Reader, cmd string) string {
 	fmt.Println()
 	fmt.Println(ui.TitleStyle.Render("Generated command:"))
@@ -624,7 +629,6 @@ func finishCompose(reader *bufio.Reader, cmd string) string {
 	fmt.Println("  " + ui.CommandStyle.Render(cmd))
 	fmt.Println()
 
-	// Show explanation
 	result := explain.Explain(cmd)
 	if result.DangerLevel == explain.Destructive {
 		fmt.Println(ui.ErrorStyle.Render("  [!] This command has DESTRUCTIVE flags — review carefully"))
@@ -640,11 +644,37 @@ func finishCompose(reader *bufio.Reader, cmd string) string {
 		}
 	}
 
+	saveComposedCommand(cmd)
+
 	fmt.Println()
 	fmt.Println(ui.HintStyle.Render("  [c] Copy  [e] Edit  [x] Explain  [q] Quit"))
 	fmt.Println()
 
 	return cmd
+}
+
+func saveComposedCommand(raw string) {
+	cfg := config.Get()
+	store, err := vault.NewStore(cfg.Vault.Path)
+	if err != nil {
+		return
+	}
+	defer store.Close()
+
+	parsed := capture.Parse(raw)
+	flagsJSON, _ := json.Marshal(parsed.Flags)
+	now := time.Now().UTC()
+
+	_, _ = store.InsertCommand(&vault.Command{
+		Raw:        parsed.Raw,
+		Binary:     parsed.Binary,
+		Subcommand: parsed.Subcommand,
+		Flags:      string(flagsJSON),
+		Category:   parsed.Category,
+		Frequency:  1,
+		FirstSeen:  now,
+		LastSeen:   now,
+	})
 }
 
 // Prompt helpers

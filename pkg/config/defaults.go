@@ -38,7 +38,11 @@ func DefaultConfig() *Config {
 		Capture: CaptureConfig{
 			Enabled:        true,
 			NoiseFilter:    true,
-			SecretPatterns: []string{"password", "token", "secret", "API_KEY", "aws_secret", "credentials", "private_key"},
+			SecretPatterns: []string{
+			"password", "token", "secret", "API_KEY", "aws_secret",
+			"credentials", "private_key", "bearer", "authorization",
+			"client_secret", "encryption_key", "access_token",
+		},
 			ExcludeCommands: []string{"ls", "cd", "pwd", "clear", "exit", "history"},
 		},
 		Search: SearchConfig{

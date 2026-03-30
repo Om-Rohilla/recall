@@ -18,8 +18,8 @@
 | Item | Status |
 |------|--------|
 | **Current Phase** | Phase 6 — Release & Distribution (COMPLETE) |
-| **Last thing built** | Full Phase 6: GoReleaser config (cross-platform linux/darwin amd64/arm64, Homebrew tap), GitHub Actions CI/CD (ci.yml + release.yml), POSIX install script (scripts/install.sh), knowledge base expanded to 504 commands (16 categories), Makefile targets (snapshot, release-dry-run, coverage), release tests (tests/release_test.go), README.md updates (badges, URLs, typos, roadmap) |
-| **Next thing to build** | All 6 phases complete. Project is release-ready. |
+| **Last thing built** | Security hardening pass: vault-at-rest encryption (RECALL_VAULT_KEY), concurrency fixes, TUI safety, secret filter hardening, schema migrations, 14 risk issues resolved. 117 tests passing. |
+| **Next thing to build** | All 6 phases complete + security hardened. Tag v0.1.0 for release. |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -306,6 +306,7 @@ _(Update this after each work session so the next session knows where we left of
 | 5 | 2026-03-29 | Built ENTIRE Phase 4 UX Polish: Added bubbletea + bubbles deps. Built Bubbletea vault browser TUI (list/categories/details/help views, live search, sort cycling, delete, keybindings). Built inline search TUI with live-as-you-type results. `recall vault` (v), `recall stats`, `recall suggest-aliases` (sa) commands. Polished Lipgloss theme with 12 new styles. Added hotkey bindings (Ctrl+Space/K/E) for zsh + bash. Added 8 new Store methods for queries. 20+ new tests (80 total). All passing. | Start Phase 5: Security + Export — AES-256 encryption, export/import, Fish support |
 | 6 | 2026-03-29 | Built ENTIRE Phase 5 Security + Export: AES-256-GCM encryption with Argon2id key derivation (crypto.go). Secure password input with terminal echo suppression (terminal.go). Export/import commands with encrypted+plain+merge modes (export_cmd.go). Config command with show/set/get/reset/path subcommands and validation (config_cmd.go). Fish shell hook with postexec capture + hotkeys (recall.fish, hooks.go). ExportData model + vault store export/import methods. 22 new tests (102 total). All passing. | Start Phase 6: Release — GoReleaser, CI/CD, install script, expanded knowledge base |
 | 7 | 2026-03-29 | Built ENTIRE Phase 6 Release & Distribution: GoReleaser config (cross-platform linux/darwin × amd64/arm64, Homebrew tap, ldflags). GitHub Actions CI (vet, test -race, build, staticcheck) + Release (tag-triggered GoReleaser). POSIX install script (OS/arch detection, checksum verify, fallback dir). Makefile targets (snapshot, release-dry-run, coverage). Knowledge base 232→504 commands across 16 categories (added security, database, aws, terraform). 11 release tests. README updates (CI badge, URLs, typos, roadmap). All tests passing. | ALL 6 PHASES COMPLETE. Tag v0.1.0 to trigger first release. |
+| 8 | 2026-03-30 | Security hardening & risk remediation (14 fixes). CRITICAL: vault-at-rest encryption via RECALL_VAULT_KEY (AES-256-GCM on DB file, secure delete of temp files); config.Reset() race fixed with mutex. HIGH: search TUI debounce (150ms), vault browser delete confirmation, FindKnowledgeBasePath rewritten with filepath.Dir. MEDIUM: enricher consolidated to internal/context, compose saves to vault, FTS5 wildcard blocked, schema migration system. LOW: SQL injection eliminated, hook scripts aligned, README corrected, 15 new secret filter patterns. 117 tests passing (15 new). | Tag v0.1.0 for release. |
 
 ---
 

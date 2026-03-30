@@ -40,3 +40,27 @@ fi
 
 trap '__recall_preexec' DEBUG
 PROMPT_COMMAND="__recall_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+
+# Recall hotkey bindings
+__recall_search_binding() {
+    local selected
+    selected=$(recall search-tui 2>/dev/null)
+    if [ -n "$selected" ]; then
+        READLINE_LINE="$selected"
+        READLINE_POINT=${#READLINE_LINE}
+    fi
+}
+
+__recall_vault_binding() {
+    recall vault </dev/tty
+}
+
+__recall_explain_binding() {
+    if [ -n "$READLINE_LINE" ]; then
+        recall explain "$READLINE_LINE" </dev/tty
+    fi
+}
+
+bind -x '"\C- ": __recall_search_binding'   # Ctrl+Space
+bind -x '"\C-k": __recall_vault_binding'    # Ctrl+K
+bind -x '"\C-e": __recall_explain_binding'  # Ctrl+E

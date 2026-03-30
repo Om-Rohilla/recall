@@ -58,6 +58,12 @@ func matchesSecretAssignment(lower string) bool {
 		"password=", "passwd=", "token=", "secret=",
 		"api_key=", "apikey=", "aws_secret", "private_key=",
 		"credentials=", "auth_token=", "access_key=",
+		"secret_key=", "client_secret=", "encryption_key=",
+		"bearer ", "authorization:", "ghp_", "gho_", "github_token",
+		"sk-", "sk_live_", "sk_test_",
+		"-----begin", "-----begin rsa", "-----begin openssh",
+		"mysql -p", "psql://", "mongodb+srv://",
+		"://:@", "://user:pass@",
 	}
 	for _, p := range secretEnvPatterns {
 		if strings.Contains(lower, p) {

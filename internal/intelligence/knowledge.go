@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/Om-Rohilla/recall/internal/vault"
 )
@@ -74,23 +75,20 @@ func FindKnowledgeBasePath() string {
 
 	execPath, err := os.Executable()
 	if err == nil {
-		dir := execPath
+		dir := filepath.Dir(execPath)
 		for i := 0; i < 3; i++ {
-			dir = dir[:max(0, len(dir)-1)]
-			idx := len(dir) - 1
-			for idx >= 0 && dir[idx] != '/' {
-				idx--
+			candidates = append(candidates, filepath.Join(dir, "data", "knowledge.json"))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
 			}
-			if idx >= 0 {
-				dir = dir[:idx]
-			}
-			candidates = append(candidates, dir+"/data/knowledge.json")
+			dir = parent
 		}
 	}
 
 	homeDir, _ := os.UserHomeDir()
 	if homeDir != "" {
-		candidates = append(candidates, homeDir+"/.local/share/recall/knowledge.json")
+		candidates = append(candidates, filepath.Join(homeDir, ".local", "share", "recall", "knowledge.json"))
 	}
 
 	for _, path := range candidates {

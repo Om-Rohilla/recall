@@ -3,12 +3,14 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Om-Rohilla/recall/internal/capture"
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/Om-Rohilla/recall/pkg/shell"
@@ -618,6 +620,171 @@ func TestEncryptedExportFile(t *testing.T) {
 
 	if result.CommandCount != 5 {
 		t.Fatalf("expected 5 commands, got %d", result.CommandCount)
+	}
+}
+
+// --- Encrypted Vault at Rest Tests ---
+
+func TestEncryptedVaultRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "vault.db")
+
+	// Generate a 32-byte hex key
+	keyBytes := make([]byte, 32)
+	for i := range keyBytes {
+		keyBytes[i] = byte(i + 1)
+	}
+	keyHex := fmt.Sprintf("%x", keyBytes)
+	t.Setenv("RECALL_VAULT_KEY", keyHex)
+
+	store, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("creating encrypted vault: %v", err)
+	}
+
+	now := time.Now().UTC()
+	_, err = store.InsertCommand(&vault.Command{
+		Raw: "git push origin main", Binary: "git", Subcommand: "push",
+		Category: "git", Frequency: 1, FirstSeen: now, LastSeen: now,
+	})
+	if err != nil {
+		t.Fatalf("inserting command: %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("closing encrypted vault: %v", err)
+	}
+
+	encPath := dbPath + ".enc"
+	if _, err := os.Stat(encPath); os.IsNotExist(err) {
+		t.Fatal("encrypted vault file should exist after close")
+	}
+
+	encData, _ := os.ReadFile(encPath)
+	if strings.Contains(string(encData), "git push") {
+		t.Fatal("encrypted vault file should not contain plaintext commands")
+	}
+
+	store2, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopening encrypted vault: %v", err)
+	}
+	defer store2.Close()
+
+	stats, err := store2.GetStats()
+	if err != nil {
+		t.Fatalf("getting stats: %v", err)
+	}
+	if stats.UniqueCommands != 1 {
+		t.Fatalf("expected 1 command after decrypt, got %d", stats.UniqueCommands)
+	}
+}
+
+func TestVaultDirectoryPermissions(t *testing.T) {
+	dir := t.TempDir()
+	vaultDir := filepath.Join(dir, "recall_vault")
+	dbPath := filepath.Join(vaultDir, "vault.db")
+
+	store, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("creating vault: %v", err)
+	}
+	defer store.Close()
+
+	info, err := os.Stat(vaultDir)
+	if err != nil {
+		t.Fatalf("stat vault dir: %v", err)
+	}
+
+	perm := info.Mode().Perm()
+	if perm&0o077 != 0 {
+		t.Errorf("vault directory should be 0700, got %o", perm)
+	}
+}
+
+func TestFTSQuerySanitizationBlocksWildcard(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	store, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("creating vault: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now().UTC()
+	_, _ = store.InsertCommand(&vault.Command{
+		Raw: "git status", Binary: "git", Category: "git",
+		Frequency: 1, FirstSeen: now, LastSeen: now, Flags: "[]",
+	})
+	_ = store.RebuildFTSIndex()
+
+	results, err := store.SearchFTS5("git*", 10)
+	if err != nil {
+		t.Fatalf("FTS5 search with wildcard: %v", err)
+	}
+	if len(results) > 0 {
+		for _, r := range results {
+			if strings.Contains(r.Command.Raw, "*") {
+				t.Error("wildcard should not appear in results")
+			}
+		}
+	}
+}
+
+func TestSchemaMigration(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "migrate.db")
+
+	store, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("creating vault: %v", err)
+	}
+	store.Close()
+
+	store2, err := vault.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopening vault (migration): %v", err)
+	}
+	defer store2.Close()
+
+	stats, err := store2.GetStats()
+	if err != nil {
+		t.Fatalf("getting stats after migration: %v", err)
+	}
+	if stats == nil {
+		t.Fatal("stats should not be nil")
+	}
+}
+
+// --- Enhanced Secret Filtering Tests ---
+
+func TestSecretFilteringEnhanced(t *testing.T) {
+	cfg := config.DefaultConfig()
+
+	tests := []struct {
+		name    string
+		cmd     string
+		allowed bool
+	}{
+		{"bearer token", "curl -H 'Authorization: Bearer abc123'", false},
+		{"github token", "export GITHUB_TOKEN=ghp_abc123", false},
+		{"openai key", "export OPENAI_API_KEY=sk-abc123", false},
+		{"private key inline", "echo '-----BEGIN RSA PRIVATE KEY-----'", false},
+		{"mysql password", "mysql -pMySecret123", false},
+		{"mongodb uri", "mongosh mongodb+srv://user:pass@cluster.net", false},
+		{"connection string", "psql://admin:secret@localhost/db", false},
+		{"safe command", "git commit -m 'fix typo'", true},
+		{"safe docker", "docker compose up -d", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := capture.Filter(tt.cmd, cfg)
+			if result.Allowed != tt.allowed {
+				t.Errorf("Filter(%q) = allowed:%v, want %v (reason: %s)",
+					tt.cmd, result.Allowed, tt.allowed, result.Reason)
+			}
+		})
 	}
 }
 

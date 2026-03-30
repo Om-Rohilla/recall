@@ -264,7 +264,7 @@ For the complete reference with all flags and examples, see [Commands](docs/COMM
 Recall takes privacy seriously:
 
 1. **Nothing leaves your machine.** Zero network calls. No telemetry. No analytics.
-2. **Vault is encrypted at rest** — AES-256-GCM.
+2. **Vault encryption at rest** — AES-256-GCM via `RECALL_VAULT_KEY`. Exports encrypted with Argon2id key derivation. Vault files are permission-locked (0600).
 3. **Secrets are never stored** — commands containing `password`, `token`, `secret`, `API_KEY` are filtered automatically.
 4. **You own your data.** Export, delete, or inspect at any time.
 5. **Open source.** Read every line of code.
