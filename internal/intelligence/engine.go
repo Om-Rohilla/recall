@@ -11,7 +11,18 @@ import (
 	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
-var kbOnce sync.Once
+var (
+	kbMu     sync.Mutex
+	kbLoaded bool
+)
+
+// ResetKnowledgeBase allows the knowledge base to be reloaded on next search.
+// Call this after updating the knowledge base file on disk.
+func ResetKnowledgeBase() {
+	kbMu.Lock()
+	kbLoaded = false
+	kbMu.Unlock()
+}
 
 type SearchOptions struct {
 	Limit        int
@@ -72,9 +83,12 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 	// Stage 2b: Fetch knowledge base candidates
 	if !opts.VaultOnly {
 		if opts.KBPath != "" {
-			kbOnce.Do(func() {
+			kbMu.Lock()
+			if !kbLoaded {
 				LoadKnowledgeBase(store, opts.KBPath)
-			})
+				kbLoaded = true
+			}
+			kbMu.Unlock()
 		}
 
 		kbResults, err := store.SearchKnowledgeFTS5(ftsQuery, fetchLimit)
@@ -163,6 +177,10 @@ func dedup(scored []ScoredResult) []ScoredResult {
 }
 
 func extractBinary(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
 	for i, r := range raw {
 		if r == ' ' || r == '\t' {
 			return raw[:i]
