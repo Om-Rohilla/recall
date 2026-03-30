@@ -42,6 +42,9 @@ func init() {
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
+	if exportPassword != "" {
+		fmt.Fprintln(os.Stderr, "Warning: --password is visible in your process table. Use the interactive prompt instead for better security.")
+	}
 	cfg := config.Get()
 
 	store, err := vault.NewStore(cfg.Vault.Path)
@@ -87,7 +90,10 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	key := vault.DeriveKey(password, salt)
+	key, err := vault.DeriveKey(password, salt)
+	if err != nil {
+		return fmt.Errorf("deriving encryption key: %w", err)
+	}
 
 	encrypted, err := vault.Encrypt(jsonData, key)
 	if err != nil {
@@ -137,6 +143,9 @@ func init() {
 }
 
 func runImport(cmd *cobra.Command, args []string) error {
+	if importPassword != "" {
+		fmt.Fprintln(os.Stderr, "Warning: --password is visible in your process table. Use the interactive prompt instead for better security.")
+	}
 	cfg := config.Get()
 
 	fileData, err := os.ReadFile(importInput)
@@ -158,7 +167,10 @@ func runImport(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		key := vault.DeriveKey(password, salt)
+		key, dkErr := vault.DeriveKey(password, salt)
+		if dkErr != nil {
+			return fmt.Errorf("deriving decryption key: %w", dkErr)
+		}
 		jsonData, err = vault.Decrypt(encryptedData, key)
 		if err != nil {
 			return fmt.Errorf("decrypting import: %w", err)

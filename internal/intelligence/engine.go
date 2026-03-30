@@ -1,11 +1,17 @@
 package intelligence
 
 import (
+	"fmt"
 	"sort"
+	"strings"
+	"sync"
 
 	appctx "github.com/Om-Rohilla/recall/internal/context"
 	"github.com/Om-Rohilla/recall/internal/vault"
+	"github.com/Om-Rohilla/recall/pkg/logging"
 )
+
+var kbOnce sync.Once
 
 type SearchOptions struct {
 	Limit        int
@@ -33,19 +39,27 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 	}
 
 	maxFreq, _ := store.GetMaxFrequency()
-	fetchLimit := opts.Limit * 5 // fetch more candidates for better scoring
+	fetchLimit := opts.Limit * 5
 
 	var scored []ScoredResult
+	var vaultErr, kbErr error
 
 	// Stage 2a: Fetch vault candidates
 	if !opts.KBOnly {
 		vaultResults, err := store.SearchFTS5(ftsQuery, fetchLimit)
-		if err == nil {
+		if err != nil {
+			vaultErr = err
+		} else {
+			cmdIDs := make([]int64, 0, len(vaultResults))
 			for _, r := range vaultResults {
-				contexts, _ := store.GetContextsForCommand(r.Command.ID)
+				cmdIDs = append(cmdIDs, r.Command.ID)
+			}
+			ctxMap := batchGetContexts(store, cmdIDs)
+
+			for _, r := range vaultResults {
 				input := ScoringInput{
 					Command:      r.Command,
-					Contexts:     contexts,
+					Contexts:     ctxMap[r.Command.ID],
 					FTSRank:      r.Score,
 					MaxFrequency: maxFreq,
 					MatchType:    "vault",
@@ -58,11 +72,15 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 	// Stage 2b: Fetch knowledge base candidates
 	if !opts.VaultOnly {
 		if opts.KBPath != "" {
-			LoadKnowledgeBase(store, opts.KBPath)
+			kbOnce.Do(func() {
+				LoadKnowledgeBase(store, opts.KBPath)
+			})
 		}
 
 		kbResults, err := store.SearchKnowledgeFTS5(ftsQuery, fetchLimit)
-		if err == nil {
+		if err != nil {
+			kbErr = err
+		} else {
 			for _, k := range kbResults {
 				cmd := vault.Command{
 					Raw:      k.Command,
@@ -71,7 +89,7 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 				}
 				input := ScoringInput{
 					Command:      cmd,
-					FTSRank:      1.0, // neutral FTS rank for knowledge
+					FTSRank:      1.0,
 					MaxFrequency: maxFreq,
 					MatchType:    "knowledge",
 				}
@@ -79,6 +97,21 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 			}
 		}
 	}
+
+	log := logging.Get()
+	if vaultErr != nil {
+		log.Warn("vault FTS5 search failed", "error", vaultErr, "query", ftsQuery)
+	}
+	if kbErr != nil {
+		log.Warn("knowledge base FTS5 search failed", "error", kbErr, "query", ftsQuery)
+	}
+	if len(scored) == 0 && (vaultErr != nil || kbErr != nil) {
+		if vaultErr != nil {
+			return nil, fmt.Errorf("vault search failed: %w", vaultErr)
+		}
+		return nil, fmt.Errorf("knowledge base search failed: %w", kbErr)
+	}
+	log.Debug("search completed", "query", query, "results", len(scored))
 
 	// Stage 3: Sort by final score (descending)
 	sort.Slice(scored, func(i, j int) bool {
@@ -88,11 +121,11 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 	// Deduplicate by raw command
 	scored = dedup(scored)
 
-	// Filter by category if specified
 	if opts.Category != "" {
+		catLower := strings.ToLower(opts.Category)
 		var filtered []ScoredResult
 		for _, s := range scored {
-			if s.Command.Category == opts.Category {
+			if strings.ToLower(s.Command.Category) == catLower {
 				filtered = append(filtered, s)
 			}
 		}
@@ -137,3 +170,35 @@ func extractBinary(raw string) string {
 	}
 	return raw
 }
+
+// batchGetContexts fetches contexts for multiple command IDs in a single query,
+// eliminating the N+1 query pattern that previously ran one query per candidate.
+func batchGetContexts(store *vault.Store, ids []int64) map[int64][]vault.Context {
+	result := make(map[int64][]vault.Context, len(ids))
+	if len(ids) == 0 {
+		return result
+	}
+
+	const batchSize = 50
+	for start := 0; start < len(ids); start += batchSize {
+		end := start + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := ids[start:end]
+
+		ctxs, err := store.GetContextsForCommandBatch(batch)
+		if err != nil {
+			for _, id := range batch {
+				c, _ := store.GetContextsForCommand(id)
+				result[id] = c
+			}
+			continue
+		}
+		for cmdID, c := range ctxs {
+			result[cmdID] = c
+		}
+	}
+	return result
+}
+

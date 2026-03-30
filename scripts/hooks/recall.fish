@@ -8,8 +8,8 @@ if not set -q RECALL_SESSION_ID
 end
 
 function __recall_postexec --on-event fish_postexec
-    set -l cmd $argv[1]
     set -l exit_code $status
+    set -l cmd $argv[1]
     set -l cwd $PWD
 
     # Measure duration using fish's built-in CMD_DURATION (milliseconds)

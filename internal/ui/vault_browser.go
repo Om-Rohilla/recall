@@ -7,8 +7,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Om-Rohilla/recall/internal/vault"
+	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
 type viewMode int
@@ -63,6 +65,8 @@ type VaultBrowserModel struct {
 	confirmDelete  bool
 	deleteTargetID int64
 
+	cachedStats *vault.VaultStats
+
 	ready   bool
 	quitting bool
 }
@@ -95,25 +99,23 @@ func NewVaultBrowser(store *vault.Store, category string, sortBy string) VaultBr
 type commandsLoadedMsg struct {
 	commands   []vault.Command
 	categories []vault.CategoryCount
+	err        error
 }
 
 func loadCommands(store *vault.Store, sortBy sortMode, category string) tea.Cmd {
 	return func() tea.Msg {
 		var cmds []vault.Command
-		var err error
+		var loadErr error
 
 		if category != "" {
-			cmds, err = store.GetCommandsByCategory(category, 500)
+			cmds, loadErr = store.GetCommandsByCategory(category, 500)
 		} else {
-			cmds, err = store.GetAllCommands(sortBy.String(), 500)
-		}
-		if err != nil {
-			cmds = nil
+			cmds, loadErr = store.GetAllCommands(sortBy.String(), 500)
 		}
 
 		cats, _ := store.GetCategories()
 
-		return commandsLoadedMsg{commands: cmds, categories: cats}
+		return commandsLoadedMsg{commands: cmds, categories: cats, err: loadErr}
 	}
 }
 
@@ -127,6 +129,7 @@ func (m VaultBrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commands = msg.commands
 		m.categories = msg.categories
 		m.filtered = m.applyFilter()
+		m.cachedStats, _ = m.store.GetStats()
 		m.ready = true
 		return m, nil
 
@@ -171,7 +174,9 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 	if m.confirmDelete {
 		switch msg.String() {
 		case "y", "Y":
-			_ = m.store.DeleteCommand(m.deleteTargetID)
+			if err := m.store.DeleteCommand(m.deleteTargetID); err != nil {
+				logging.Get().Warn("failed to delete command", "id", m.deleteTargetID, "error", err)
+			}
 			m.confirmDelete = false
 			m.deleteTargetID = 0
 			return m, loadCommands(m.store, m.sort, m.filterCategory)
@@ -425,12 +430,11 @@ func (m VaultBrowserModel) View() string {
 }
 
 func (m VaultBrowserModel) renderHeader() string {
-	stats, _ := m.store.GetStats()
 	total := 0
 	unique := 0
-	if stats != nil {
-		total = stats.TotalCommands
-		unique = stats.UniqueCommands
+	if m.cachedStats != nil {
+		total = m.cachedStats.TotalCommands
+		unique = m.cachedStats.UniqueCommands
 	}
 
 	title := TitleStyle.Render("  Recall Vault")
@@ -663,7 +667,7 @@ func (m VaultBrowserModel) renderStatusBar() string {
 		maxLeft = 0
 	}
 	if lipgloss.Width(left) > maxLeft {
-		left = left[:maxLeft]
+		left = ansi.Truncate(left, maxLeft, "")
 	}
 
 	return left + strings.Repeat(" ", max(0, m.width-lipgloss.Width(left)-lipgloss.Width(pos))) + pos

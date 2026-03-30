@@ -41,8 +41,14 @@ func GenerateSalt() ([]byte, error) {
 }
 
 // DeriveKey uses Argon2id to derive a 256-bit key from a password and salt.
-func DeriveKey(password string, salt []byte) []byte {
-	return argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, KeySize)
+func DeriveKey(password string, salt []byte) ([]byte, error) {
+	if password == "" {
+		return nil, fmt.Errorf("password must not be empty")
+	}
+	if len(salt) == 0 {
+		return nil, fmt.Errorf("salt must not be empty")
+	}
+	return argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, KeySize), nil
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM with the given key.

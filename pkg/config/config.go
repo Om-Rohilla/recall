@@ -107,22 +107,40 @@ func loadFromDisk() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
 	path := DefaultConfigPath()
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
-	f, err := os.Create(path)
+	tmpPath := path + ".tmp"
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("creating config file: %w", err)
+		return fmt.Errorf("creating temp config file: %w", err)
 	}
-	defer f.Close()
 
 	encoder := toml.NewEncoder(f)
 	if err := encoder.Encode(cfg); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
 		return fmt.Errorf("writing config: %w", err)
 	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing temp config file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming config file: %w", err)
+	}
+
+	globalConfig = cfg
+	configOnce = sync.Once{}
+	configOnce.Do(func() {})
 
 	return nil
 }

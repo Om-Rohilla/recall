@@ -101,7 +101,7 @@ func executeSearch(args []string) error {
 
 	if len(results) == 0 {
 		fmt.Println(ui.RenderNoResults(query))
-		os.Exit(2)
+		return nil
 	}
 
 	if searchJSON {

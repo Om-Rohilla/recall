@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 6 — Release & Distribution (COMPLETE) — v0.1.0 RELEASED |
-| **Last thing built** | v0.1.0 release: GitHub Release live with 4 platform binaries, Homebrew tap (Om-Rohilla/homebrew-tap), install script working, repo made public. |
-| **Next thing to build** | v0.1.0 launched. Gather user feedback, plan v0.2.0 features. |
+| **Current Phase** | v0.2.0 Production Hardening (COMPLETE) |
+| **Last thing built** | Full production-readiness refactor: 7 Critical + 20 High-severity issues resolved, architectural extraction (cmd/ -> internal/), structured logging, all tests green |
+| **Next thing to build** | Tag v0.2.0, release via GoReleaser, update changelog |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -308,6 +308,7 @@ _(Update this after each work session so the next session knows where we left of
 | 7 | 2026-03-29 | Built ENTIRE Phase 6 Release & Distribution: GoReleaser config (cross-platform linux/darwin × amd64/arm64, Homebrew tap, ldflags). GitHub Actions CI (vet, test -race, build, staticcheck) + Release (tag-triggered GoReleaser). POSIX install script (OS/arch detection, checksum verify, fallback dir). Makefile targets (snapshot, release-dry-run, coverage). Knowledge base 232→504 commands across 16 categories (added security, database, aws, terraform). 11 release tests. README updates (CI badge, URLs, typos, roadmap). All tests passing. | ALL 6 PHASES COMPLETE. Tag v0.1.0 to trigger first release. |
 | 8 | 2026-03-30 | Security hardening & risk remediation (14 fixes). CRITICAL: vault-at-rest encryption via RECALL_VAULT_KEY (AES-256-GCM on DB file, secure delete of temp files); config.Reset() race fixed with mutex. HIGH: search TUI debounce (150ms), vault browser delete confirmation, FindKnowledgeBasePath rewritten with filepath.Dir. MEDIUM: enricher consolidated to internal/context, compose saves to vault, FTS5 wildcard blocked, schema migration system. LOW: SQL injection eliminated, hook scripts aligned, README corrected, 15 new secret filter patterns. 117 tests passing (15 new). | Tag v0.1.0 for release. |
 | 9 | 2026-03-30 | v0.1.0 RELEASE: Created homebrew-tap repo, fixed GoReleaser deprecations (formats, homebrew_casks, snapshot.name_template), pushed Homebrew cask manually, made repo public, verified install script + binary download + all commands working. Updated release workflow to use GH_PAT for cross-repo Homebrew push. | Gather feedback, plan v0.2.0. |
+| 10 | 2026-03-30 | v0.2.0 PRODUCTION HARDENING: Resolved all 7 Critical + 20 High + 2 Observability issues. **Critical**: Fish hook $status fix, ImportVaultData transactional, os.Exit removed from search, Close() plaintext leak fix, quote-aware firstSegment, compose business logic extracted to internal/compose/, ANSI-safe truncation. **High**: InsertCommand upsert (ON CONFLICT), FTS5 error propagation, N+1 batch context queries, KB sync.Once loading, stats caching in TUI, atomic config save, mutex on Save(), homeDir error handling, Bash Ctrl+E rebinding, quote escaping in compose, saveComposedCommand error handling, suggest.go panic guard, DeleteCommand CASCADE, unbounded query limits, trigram short-string fix, 30+ secret filter patterns, unified filter tiers, rendering extracted to internal/ui/, git worktree detection, password flag warning. **Observability**: log/slog JSON logger (RECALL_DEBUG=1), logging in vault/capture/intelligence. **Architecture**: Created internal/compose/ (650 lines extracted), internal/ui/render_explain.go, pkg/logging/. cmd/ files are now thin wrappers. All tests green. | Tag v0.2.0, release. |
 
 ---
 

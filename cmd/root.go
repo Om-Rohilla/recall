@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/Om-Rohilla/recall/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +35,7 @@ Nothing ever leaves your machine.`,
 }
 
 func Execute() error {
+	logging.Init()
 	return rootCmd.Execute()
 }
 

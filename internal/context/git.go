@@ -40,8 +40,15 @@ func DetectGit(cwd string) GitState {
 func findGitRoot(cwd string) string {
 	dir := cwd
 	for {
-		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil && info.IsDir() {
-			return dir
+		gitPath := filepath.Join(dir, ".git")
+		info, err := os.Stat(gitPath)
+		if err == nil {
+			if info.IsDir() {
+				return dir
+			}
+			if !info.IsDir() {
+				return dir
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

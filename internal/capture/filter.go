@@ -31,45 +31,64 @@ func Filter(raw string, cfg *config.Config) FilterResult {
 	return FilterResult{Allowed: true}
 }
 
-// containsSecret checks if the command contains any secret patterns.
-func containsSecret(raw string, patterns []string) bool {
+// builtinSecretPatterns are always-on patterns that cannot be disabled.
+// These catch common credential formats regardless of user config.
+var builtinSecretPatterns = []string{
+	"password=", "passwd=", "token=", "secret=",
+	"api_key=", "apikey=", "aws_secret", "private_key=",
+	"credentials=", "auth_token=", "access_key=",
+	"secret_key=", "client_secret=", "encryption_key=",
+	"bearer ", "authorization:", "ghp_", "gho_", "github_token",
+	"sk-", "sk_live_", "sk_test_",
+	"-----begin", "-----begin rsa", "-----begin openssh",
+	"psql://", "mongodb+srv://", "redis://:",
+	"://:@", "://user:pass@",
+	"xoxb-", "xoxp-", "xoxs-",
+	"azure_client_secret", "heroku_api_key",
+	"slack_token", "slack_webhook_url", "sendgrid_api_key",
+	"database_url=", "aws_session_token",
+}
+
+// builtinCommandPatterns catch dangerous auth-passing CLI patterns.
+var builtinCommandPatterns = []struct {
+	binary string
+	flags  []string
+}{
+	{"curl", []string{" -u ", " --user ", " --user="}},
+	{"wget", []string{" --password", " --password=", " --http-password"}},
+	{"docker", []string{" login -p", " login --password"}},
+	{"sshpass", []string{" -p "}},
+	{"mysql", []string{" -p"}},
+	{"htpasswd", []string{" -b "}},
+	{"vault", []string{" login ", " write "}},
+	{"npm", []string{" set //:"}},
+}
+
+func containsSecret(raw string, userPatterns []string) bool {
 	lower := strings.ToLower(raw)
-	for _, pattern := range patterns {
+
+	for _, pattern := range userPatterns {
 		if strings.Contains(lower, strings.ToLower(pattern)) {
 			return true
 		}
 	}
 
-	// Also catch inline secret assignments: export SECRET=..., KEY=value cmd
-	if matchesSecretAssignment(lower) {
-		return true
-	}
-
-	// Catch curl with auth: curl -u user:pass
-	if strings.Contains(lower, "curl") && strings.Contains(lower, " -u ") {
-		return true
-	}
-
-	return false
-}
-
-func matchesSecretAssignment(lower string) bool {
-	secretEnvPatterns := []string{
-		"password=", "passwd=", "token=", "secret=",
-		"api_key=", "apikey=", "aws_secret", "private_key=",
-		"credentials=", "auth_token=", "access_key=",
-		"secret_key=", "client_secret=", "encryption_key=",
-		"bearer ", "authorization:", "ghp_", "gho_", "github_token",
-		"sk-", "sk_live_", "sk_test_",
-		"-----begin", "-----begin rsa", "-----begin openssh",
-		"mysql -p", "psql://", "mongodb+srv://",
-		"://:@", "://user:pass@",
-	}
-	for _, p := range secretEnvPatterns {
+	for _, p := range builtinSecretPatterns {
 		if strings.Contains(lower, p) {
 			return true
 		}
 	}
+
+	for _, cp := range builtinCommandPatterns {
+		if strings.Contains(lower, cp.binary) {
+			for _, flag := range cp.flags {
+				if strings.Contains(lower, flag) {
+					return true
+				}
+			}
+		}
+	}
+
 	return false
 }
 

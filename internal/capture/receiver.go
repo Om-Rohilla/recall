@@ -3,42 +3,53 @@ package capture
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
+	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
 // ProcessCommand is the main entry point for the capture pipeline.
 // It parses, filters, enriches, and stores a command.
 func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Config) error {
+	log := logging.Get()
+
 	if !cfg.Capture.Enabled {
+		log.Debug("capture disabled, skipping")
 		return nil
 	}
 
-	// Step 1: Filter
 	filterResult := Filter(data.RawCommand, cfg)
 	if !filterResult.Allowed {
+		log.Debug("command filtered", "reason", filterResult.Reason, "command", data.RawCommand)
 		return nil
 	}
 
 	// Step 2: Parse
 	parsed := Parse(data.RawCommand)
 
-	// Step 3: Enrich
-	enrichment := Enrich(data.Cwd)
-	if data.GitRepo == "" {
-		data.GitRepo = enrichment.GitRepo
-	}
-	if data.GitBranch == "" {
-		data.GitBranch = enrichment.GitBranch
-	}
-	if data.ProjectType == "" {
-		data.ProjectType = enrichment.ProjectType
+	// Step 3: Enrich (only if context data missing — avoids expensive git subprocess calls)
+	if data.GitRepo == "" || data.GitBranch == "" || data.ProjectType == "" {
+		enrichment := Enrich(data.Cwd)
+		if data.GitRepo == "" {
+			data.GitRepo = enrichment.GitRepo
+		}
+		if data.GitBranch == "" {
+			data.GitBranch = enrichment.GitBranch
+		}
+		if data.ProjectType == "" {
+			data.ProjectType = enrichment.ProjectType
+		}
 	}
 
 	// Step 4: Store
-	flagsJSON, _ := json.Marshal(parsed.Flags)
+	flagsJSON, marshalErr := json.Marshal(parsed.Flags)
+	if marshalErr != nil {
+		log.Warn("failed to marshal flags", "error", marshalErr)
+		flagsJSON = []byte("[]")
+	}
 	exitCode := data.ExitCode
 
 	cmd := &vault.Command{
@@ -103,14 +114,14 @@ func ProcessHistoryLine(line string, cfg *config.Config) *vault.Command {
 		return nil
 	}
 
-	flagsJSON, _ := json.Marshal(parsed.Flags)
+	histFlagsJSON, _ := json.Marshal(parsed.Flags)
 	now := time.Now().UTC()
 
 	return &vault.Command{
 		Raw:        parsed.Raw,
 		Binary:     parsed.Binary,
 		Subcommand: parsed.Subcommand,
-		Flags:      string(flagsJSON),
+		Flags:      string(histFlagsJSON),
 		Category:   parsed.Category,
 		Frequency:  1,
 		FirstSeen:  now,
@@ -122,18 +133,9 @@ func ProcessHistoryLine(line string, cfg *config.Config) *vault.Command {
 func cleanHistoryLine(line string) string {
 	// Zsh extended history format: : 1234567890:0;actual command
 	if len(line) > 0 && line[0] == ':' {
-		if idx := findIndex(line, ';'); idx >= 0 {
+		if idx := strings.IndexByte(line, ';'); idx >= 0 {
 			return line[idx+1:]
 		}
 	}
 	return line
-}
-
-func findIndex(s string, b byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			return i
-		}
-	}
-	return -1
 }

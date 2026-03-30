@@ -14,12 +14,17 @@ type ParsedCommand struct {
 	Category   string   `json:"category"`
 }
 
+const maxCommandLen = 10240 // 10 KB safety limit
+
 // Parse breaks a raw command string into structured components.
 // Handles pipes, &&, ;, and quoted arguments.
 func Parse(raw string) ParsedCommand {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ParsedCommand{Raw: raw}
+	}
+	if len(raw) > maxCommandLen {
+		raw = raw[:maxCommandLen]
 	}
 
 	// For piped/chained commands, parse only the first segment
@@ -58,9 +63,34 @@ func Parse(raw string) ParsedCommand {
 	return pc
 }
 
-// firstSegment extracts the first command from a pipe/chain.
+// firstSegment extracts the first command from a pipe/chain,
+// respecting single and double quotes so that delimiters inside
+// quoted strings are not treated as segment boundaries.
 func firstSegment(raw string) string {
+	inSingle := false
+	inDouble := false
+	escaped := false
+
 	for i, r := range raw {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		if r == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if r == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
 		if r == '|' || r == ';' {
 			return strings.TrimSpace(raw[:i])
 		}
@@ -143,28 +173,33 @@ func classifyTokens(binary string, tokens []string) (subcommand string, flags []
 }
 
 // isLikelySubcommand checks if a token looks like a subcommand for known multi-level CLIs.
+var multiCmdTools = map[string]bool{
+	"git": true, "docker": true, "kubectl": true, "npm": true,
+	"yarn": true, "cargo": true, "go": true, "pip": true, "pip3": true,
+	"apt": true, "brew": true, "systemctl": true, "journalctl": true,
+	"helm": true, "terraform": true, "aws": true, "gcloud": true,
+	"az": true, "heroku": true, "gh": true, "flyctl": true,
+	"podman": true, "snap": true, "dnf": true, "pacman": true,
+	"pnpm": true, "bun": true, "deno": true, "rustup": true,
+	"conda": true, "composer": true, "gradle": true, "mvn": true,
+	"dotnet": true, "flutter": true, "firebase": true, "vercel": true,
+}
+
 func isLikelySubcommand(binary, token string) bool {
 	if strings.HasPrefix(token, "-") || strings.HasPrefix(token, "/") || strings.HasPrefix(token, ".") {
 		return false
 	}
-	multiCmdTools := map[string]bool{
-		"git": true, "docker": true, "kubectl": true, "npm": true,
-		"yarn": true, "cargo": true, "go": true, "pip": true,
-		"apt": true, "brew": true, "systemctl": true, "journalctl": true,
-		"helm": true, "terraform": true, "aws": true, "gcloud": true,
-		"az": true, "heroku": true, "gh": true, "flyctl": true,
-		"podman": true, "snap": true, "dnf": true, "pacman": true,
-	}
 	return multiCmdTools[binary]
 }
 
+var commandPrefixes = map[string]bool{
+	"sudo": true, "time": true, "nice": true, "nohup": true,
+	"strace": true, "ltrace": true, "env": true, "command": true,
+	"builtin": true, "exec": true,
+}
+
 func isCommandPrefix(s string) bool {
-	prefixes := map[string]bool{
-		"sudo": true, "time": true, "nice": true, "nohup": true,
-		"strace": true, "ltrace": true, "env": true, "command": true,
-		"builtin": true, "exec": true,
-	}
-	return prefixes[s]
+	return commandPrefixes[s]
 }
 
 var categoryMap = map[string]string{

@@ -254,12 +254,26 @@ func trigramSimilarity(a, b string) float64 {
 	a = strings.ToLower(a)
 	b = strings.ToLower(b)
 
-	triA := trigrams(a)
-	triB := trigrams(b)
-
-	if len(triA) == 0 || len(triB) == 0 {
+	if len(a) < 3 || len(b) < 3 {
+		if strings.Contains(b, a) || strings.Contains(a, b) {
+			shorter := len(a)
+			if len(b) < shorter {
+				shorter = len(b)
+			}
+			longer := len(a)
+			if len(b) > longer {
+				longer = len(b)
+			}
+			return float64(shorter) / float64(longer)
+		}
+		if a == b {
+			return 1.0
+		}
 		return 0
 	}
+
+	triA := trigrams(a)
+	triB := trigrams(b)
 
 	intersection := 0
 	for tri := range triA {
@@ -277,9 +291,6 @@ func trigramSimilarity(a, b string) float64 {
 }
 
 func trigrams(s string) map[string]bool {
-	if len(s) < 3 {
-		return map[string]bool{s: true}
-	}
 	tris := make(map[string]bool)
 	for i := 0; i <= len(s)-3; i++ {
 		tris[s[i:i+3]] = true

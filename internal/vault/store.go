@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Om-Rohilla/recall/pkg/logging"
 	_ "modernc.org/sqlite"
 )
 
@@ -21,6 +22,9 @@ type Store struct {
 }
 
 func NewStore(dbPath string) (*Store, error) {
+	log := logging.Get()
+	log.Debug("opening vault", "path", dbPath)
+
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating vault directory: %w", err)
@@ -88,35 +92,44 @@ func NewStore(dbPath string) (*Store, error) {
 
 func randomHex(n int) string {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand unavailable: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 
 func (s *Store) Close() error {
-	if err := s.db.Close(); err != nil {
-		return err
-	}
+	log := logging.Get()
+	log.Debug("closing vault", "path", s.path, "encrypted", s.encKey != nil)
+	dbCloseErr := s.db.Close()
 
 	if s.encKey != nil && s.tempPath != "" {
+		cleanupTemp := func() {
+			secureDelete(s.tempPath)
+			for _, suffix := range []string{"-wal", "-shm"} {
+				secureDelete(s.tempPath + suffix)
+			}
+		}
+
 		plainData, err := os.ReadFile(s.tempPath)
 		if err != nil {
+			cleanupTemp()
 			return fmt.Errorf("reading vault for encryption: %w", err)
 		}
 		encData, err := Encrypt(plainData, s.encKey)
 		if err != nil {
+			cleanupTemp()
 			return fmt.Errorf("encrypting vault: %w", err)
 		}
 		encPath := s.path + ".enc"
 		if err := os.WriteFile(encPath, encData, 0o600); err != nil {
+			cleanupTemp()
 			return fmt.Errorf("writing encrypted vault: %w", err)
 		}
-		secureDelete(s.tempPath)
-		for _, suffix := range []string{"-wal", "-shm"} {
-			secureDelete(s.tempPath + suffix)
-		}
+		cleanupTemp()
 	}
 
-	return nil
+	return dbCloseErr
 }
 
 func secureDelete(path string) {
@@ -149,30 +162,22 @@ func (s *Store) DB() *sql.DB {
 }
 
 func (s *Store) InsertCommand(cmd *Command) (int64, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	var existingID int64
-	err := s.db.QueryRow("SELECT id FROM commands WHERE raw = ?", cmd.Raw).Scan(&existingID)
-	if err == nil {
-		if _, err := s.db.Exec(
-			"UPDATE commands SET frequency = frequency + 1, last_seen = ?, last_exit = ?, avg_duration = ? WHERE id = ?",
-			now, cmd.LastExit, cmd.AvgDuration, existingID,
-		); err != nil {
-			return 0, fmt.Errorf("updating command frequency: %w", err)
-		}
-		return existingID, nil
-	}
-
+	now := time.Now().UTC()
 	if cmd.FirstSeen.IsZero() {
-		cmd.FirstSeen = time.Now().UTC()
+		cmd.FirstSeen = now
 	}
 	if cmd.LastSeen.IsZero() {
-		cmd.LastSeen = time.Now().UTC()
+		cmd.LastSeen = now
 	}
 
 	result, err := s.db.Exec(
 		`INSERT INTO commands (raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(raw) DO UPDATE SET
+		   frequency = frequency + 1,
+		   last_seen = excluded.last_seen,
+		   last_exit = excluded.last_exit,
+		   avg_duration = excluded.avg_duration`,
 		cmd.Raw, cmd.Binary, cmd.Subcommand, cmd.Flags, cmd.Category,
 		max(cmd.Frequency, 1),
 		cmd.FirstSeen.Format(time.RFC3339),
@@ -343,6 +348,7 @@ func (s *Store) BatchInsertCommands(cmds []Command) (int, error) {
 	defer stmt.Close()
 
 	inserted := 0
+	var lastErr error
 	for _, cmd := range cmds {
 		if cmd.FirstSeen.IsZero() {
 			cmd.FirstSeen = time.Now().UTC()
@@ -358,9 +364,13 @@ func (s *Store) BatchInsertCommands(cmds []Command) (int, error) {
 			cmd.LastExit, cmd.AvgDuration,
 		)
 		if err != nil {
+			lastErr = err
 			continue
 		}
 		inserted++
+	}
+	if inserted == 0 && lastErr != nil {
+		return 0, fmt.Errorf("batch insert failed on all rows, last error: %w", lastErr)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -488,6 +498,48 @@ func (s *Store) GetContextsForCommand(commandID int64) ([]Context, error) {
 	return ctxs, rows.Err()
 }
 
+// GetContextsForCommandBatch fetches contexts for multiple command IDs in a single query.
+func (s *Store) GetContextsForCommandBatch(commandIDs []int64) (map[int64][]Context, error) {
+	result := make(map[int64][]Context, len(commandIDs))
+	if len(commandIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(commandIDs))
+	args := make([]interface{}, len(commandIDs))
+	for i, id := range commandIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id
+		 FROM contexts WHERE command_id IN (%s) ORDER BY timestamp DESC`,
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("batch getting contexts: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ctx Context
+		var ts string
+		err := rows.Scan(&ctx.ID, &ctx.CommandID, &ctx.Cwd, &ctx.GitRepo,
+			&ctx.GitBranch, &ctx.ProjectType, &ts,
+			&ctx.ExitCode, &ctx.DurationMs, &ctx.SessionID)
+		if err != nil {
+			return nil, fmt.Errorf("scanning batch context: %w", err)
+		}
+		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		result[ctx.CommandID] = append(result[ctx.CommandID], ctx)
+	}
+
+	return result, rows.Err()
+}
+
 func (s *Store) GetMaxFrequency() (int, error) {
 	var maxFreq int
 	err := s.db.QueryRow("SELECT COALESCE(MAX(frequency), 1) FROM commands").Scan(&maxFreq)
@@ -561,29 +613,22 @@ func sanitizeFTSQuery(query string) string {
 
 func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
 	const baseQuery = `SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration FROM commands`
+	const safeMax = 100000
+
+	if limit <= 0 {
+		limit = safeMax
+	}
 
 	var rows *sql.Rows
 	var err error
 
 	switch sortBy {
 	case "frequency":
-		if limit <= 0 {
-			rows, err = s.db.Query(baseQuery + ` ORDER BY frequency DESC`)
-		} else {
-			rows, err = s.db.Query(baseQuery+` ORDER BY frequency DESC LIMIT ?`, limit)
-		}
+		rows, err = s.db.Query(baseQuery+` ORDER BY frequency DESC LIMIT ?`, limit)
 	case "alpha":
-		if limit <= 0 {
-			rows, err = s.db.Query(baseQuery + ` ORDER BY raw ASC`)
-		} else {
-			rows, err = s.db.Query(baseQuery+` ORDER BY raw ASC LIMIT ?`, limit)
-		}
+		rows, err = s.db.Query(baseQuery+` ORDER BY raw ASC LIMIT ?`, limit)
 	default:
-		if limit <= 0 {
-			rows, err = s.db.Query(baseQuery + ` ORDER BY last_seen DESC`)
-		} else {
-			rows, err = s.db.Query(baseQuery+` ORDER BY last_seen DESC LIMIT ?`, limit)
-		}
+		rows, err = s.db.Query(baseQuery+` ORDER BY last_seen DESC LIMIT ?`, limit)
 	}
 
 	if err != nil {
@@ -609,9 +654,6 @@ func (s *Store) GetCommandsByCategory(category string, limit int) ([]Command, er
 }
 
 func (s *Store) DeleteCommand(id int64) error {
-	if _, err := s.db.Exec("DELETE FROM contexts WHERE command_id = ?", id); err != nil {
-		return fmt.Errorf("deleting contexts for command %d: %w", id, err)
-	}
 	if _, err := s.db.Exec("DELETE FROM commands WHERE id = ?", id); err != nil {
 		return fmt.Errorf("deleting command %d: %w", id, err)
 	}
@@ -686,7 +728,7 @@ func (s *Store) GetVaultPeriod() (time.Time, time.Time, error) {
 func (s *Store) GetHighFrequencyCommands(minFreq int) ([]Command, error) {
 	rows, err := s.db.Query(
 		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
-		 FROM commands WHERE frequency >= ? ORDER BY frequency DESC`, minFreq,
+		 FROM commands WHERE frequency >= ? ORDER BY frequency DESC LIMIT 10000`, minFreq,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getting high frequency commands: %w", err)
@@ -718,7 +760,7 @@ func scanCommands(rows *sql.Rows) ([]Command, error) {
 func (s *Store) GetAllContexts() ([]Context, error) {
 	rows, err := s.db.Query(
 		`SELECT id, command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id
-		 FROM contexts ORDER BY timestamp DESC`,
+		 FROM contexts ORDER BY timestamp DESC LIMIT 100000`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getting all contexts: %w", err)
@@ -743,7 +785,7 @@ func (s *Store) GetAllContexts() ([]Context, error) {
 
 func (s *Store) GetAllPatterns() ([]Pattern, error) {
 	rows, err := s.db.Query(
-		`SELECT id, template, frequency, suggested_alias FROM patterns ORDER BY frequency DESC`,
+		`SELECT id, template, frequency, suggested_alias FROM patterns ORDER BY frequency DESC LIMIT 50000`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getting all patterns: %w", err)
@@ -763,7 +805,7 @@ func (s *Store) GetAllPatterns() ([]Pattern, error) {
 
 // ExportVaultData exports all vault data for serialization.
 func (s *Store) ExportVaultData(commandsOnly bool) (*ExportData, error) {
-	cmds, err := s.GetAllCommands("recency", 0)
+	cmds, err := s.GetAllCommands("recency", 100000)
 	if err != nil {
 		return nil, fmt.Errorf("exporting commands: %w", err)
 	}
@@ -794,35 +836,41 @@ func (s *Store) ExportVaultData(commandsOnly bool) (*ExportData, error) {
 }
 
 // ImportVaultData imports vault data, replacing or merging based on the merge flag.
+// The entire operation is wrapped in a transaction to prevent data loss on crash.
 func (s *Store) ImportVaultData(data *ExportData, merge bool) (importedCmds, importedCtxs int, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, fmt.Errorf("beginning import transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	if !merge {
-		if _, err := s.db.Exec("DELETE FROM contexts"); err != nil {
+		if _, err := tx.Exec("DELETE FROM contexts"); err != nil {
 			return 0, 0, fmt.Errorf("clearing contexts: %w", err)
 		}
-		if _, err := s.db.Exec("DELETE FROM commands"); err != nil {
+		if _, err := tx.Exec("DELETE FROM commands"); err != nil {
 			return 0, 0, fmt.Errorf("clearing commands: %w", err)
 		}
-		if _, err := s.db.Exec("DELETE FROM patterns"); err != nil {
+		if _, err := tx.Exec("DELETE FROM patterns"); err != nil {
 			return 0, 0, fmt.Errorf("clearing patterns: %w", err)
 		}
 	}
 
-	// Build a map of old ID -> new ID for context remapping
 	idMap := make(map[int64]int64)
 
+	now := time.Now().UTC().Format(time.RFC3339)
 	for _, cmd := range data.Commands {
 		oldID := cmd.ID
 		cmd.ID = 0
 
 		if merge {
 			var existingID int64
-			err := s.db.QueryRow("SELECT id FROM commands WHERE raw = ?", cmd.Raw).Scan(&existingID)
-			if err == nil {
-				// Command exists — update frequency
-				if _, err := s.db.Exec(
+			qErr := tx.QueryRow("SELECT id FROM commands WHERE raw = ?", cmd.Raw).Scan(&existingID)
+			if qErr == nil {
+				if _, uErr := tx.Exec(
 					"UPDATE commands SET frequency = frequency + ? WHERE id = ?",
 					cmd.Frequency, existingID,
-				); err != nil {
+				); uErr != nil {
 					continue
 				}
 				idMap[oldID] = existingID
@@ -831,10 +879,26 @@ func (s *Store) ImportVaultData(data *ExportData, merge bool) (importedCmds, imp
 			}
 		}
 
-		newID, err := s.InsertCommand(&cmd)
-		if err != nil {
+		if cmd.FirstSeen.IsZero() {
+			cmd.FirstSeen = time.Now().UTC()
+		}
+		if cmd.LastSeen.IsZero() {
+			cmd.LastSeen = time.Now().UTC()
+		}
+		result, iErr := tx.Exec(
+			`INSERT INTO commands (raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(raw) DO UPDATE SET frequency = frequency + excluded.frequency, last_seen = ?`,
+			cmd.Raw, cmd.Binary, cmd.Subcommand, cmd.Flags, cmd.Category,
+			max(cmd.Frequency, 1),
+			cmd.FirstSeen.Format(time.RFC3339),
+			cmd.LastSeen.Format(time.RFC3339),
+			cmd.LastExit, cmd.AvgDuration, now,
+		)
+		if iErr != nil {
 			continue
 		}
+		newID, _ := result.LastInsertId()
 		idMap[oldID] = newID
 		importedCmds++
 	}
@@ -846,18 +910,31 @@ func (s *Store) ImportVaultData(data *ExportData, merge bool) (importedCmds, imp
 		}
 		ctx.CommandID = newCmdID
 		ctx.ID = 0
-		if err := s.InsertContext(&ctx); err != nil {
+		if ctx.Timestamp.IsZero() {
+			ctx.Timestamp = time.Now().UTC()
+		}
+		if _, cErr := tx.Exec(
+			`INSERT INTO contexts (command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			ctx.CommandID, ctx.Cwd, ctx.GitRepo, ctx.GitBranch, ctx.ProjectType,
+			ctx.Timestamp.Format(time.RFC3339),
+			ctx.ExitCode, ctx.DurationMs, ctx.SessionID,
+		); cErr != nil {
 			continue
 		}
 		importedCtxs++
 	}
 
 	for _, p := range data.Patterns {
-		_, _ = s.db.Exec(
+		_, _ = tx.Exec(
 			`INSERT INTO patterns (template, frequency, suggested_alias) VALUES (?, ?, ?)
 			 ON CONFLICT(template) DO UPDATE SET frequency = frequency + excluded.frequency`,
 			p.Template, p.Frequency, p.SuggestedAlias,
 		)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("committing import transaction: %w", err)
 	}
 
 	if err := s.RebuildFTSIndex(); err != nil {

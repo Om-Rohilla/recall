@@ -5,14 +5,24 @@ import (
 	"path/filepath"
 )
 
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	if home == "" {
+		home = "/tmp"
+	}
+	return home
+}
+
 func DefaultVaultPath() string {
 	if v := os.Getenv("RECALL_VAULT"); v != "" {
 		return v
 	}
 	dataDir := os.Getenv("XDG_DATA_HOME")
 	if dataDir == "" {
-		home, _ := os.UserHomeDir()
-		dataDir = filepath.Join(home, ".local", "share")
+		dataDir = filepath.Join(homeDir(), ".local", "share")
 	}
 	return filepath.Join(dataDir, "recall", "vault.db")
 }
@@ -23,8 +33,7 @@ func DefaultConfigPath() string {
 	}
 	configDir := os.Getenv("XDG_CONFIG_HOME")
 	if configDir == "" {
-		home, _ := os.UserHomeDir()
-		configDir = filepath.Join(home, ".config")
+		configDir = filepath.Join(homeDir(), ".config")
 	}
 	return filepath.Join(configDir, "recall", "config.toml")
 }

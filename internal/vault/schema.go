@@ -5,15 +5,17 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
+
+var pragmas = []string{
+	"PRAGMA journal_mode = WAL",
+	"PRAGMA foreign_keys = ON",
+	"PRAGMA busy_timeout = 5000",
+	"PRAGMA secure_delete = ON",
+	"PRAGMA auto_vacuum = INCREMENTAL",
+}
 
 const createSchema = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
-PRAGMA secure_delete = ON;
-PRAGMA auto_vacuum = INCREMENTAL;
-
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
 );
@@ -70,6 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_commands_frequency ON commands(frequency);
 CREATE INDEX IF NOT EXISTS idx_contexts_command_id ON contexts(command_id);
 CREATE INDEX IF NOT EXISTS idx_contexts_timestamp ON contexts(timestamp);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
+CREATE INDEX IF NOT EXISTS idx_knowledge_command ON knowledge(command);
 `
 
 const createFTS = `
@@ -145,6 +148,12 @@ var migrations = []migration{
 }
 
 func initSchema(db *sql.DB) error {
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			return fmt.Errorf("setting pragma %q: %w", p, err)
+		}
+	}
+
 	if _, err := db.Exec(createSchema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -193,11 +202,20 @@ func runMigrations(db *sql.DB) error {
 		if m.version <= currentVersion {
 			continue
 		}
-		if _, err := db.Exec(m.sql); err != nil {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("beginning migration v%d: %w", m.version, err)
+		}
+		if _, err := tx.Exec(m.sql); err != nil {
+			tx.Rollback()
 			return fmt.Errorf("migration v%d: %w", m.version, err)
 		}
-		if _, err := db.Exec("UPDATE schema_version SET version = ?", m.version); err != nil {
+		if _, err := tx.Exec("UPDATE schema_version SET version = ?", m.version); err != nil {
+			tx.Rollback()
 			return fmt.Errorf("updating schema version to %d: %w", m.version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("committing migration v%d: %w", m.version, err)
 		}
 	}
 

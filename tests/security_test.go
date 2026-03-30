@@ -31,7 +31,10 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 		{"json payload", `{"commands":[{"raw":"git push","frequency":42}]}`},
 	}
 
-	key := vault.DeriveKey("test-password-123", []byte("fixed-salt-for-testing-32bytes!!"))
+	key, err := vault.DeriveKey("test-password-123", []byte("fixed-salt-for-testing-32bytes!!"))
+	if err != nil {
+		t.Fatalf("DeriveKey: %v", err)
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,8 +63,14 @@ func TestArgon2idConsistentKeys(t *testing.T) {
 	password := "my-secure-password"
 	salt := []byte("consistent-salt-32-bytes-long!!!!")
 
-	key1 := vault.DeriveKey(password, salt)
-	key2 := vault.DeriveKey(password, salt)
+	key1, err := vault.DeriveKey(password, salt)
+	if err != nil {
+		t.Fatalf("DeriveKey: %v", err)
+	}
+	key2, err := vault.DeriveKey(password, salt)
+	if err != nil {
+		t.Fatalf("DeriveKey: %v", err)
+	}
 
 	if !bytes.Equal(key1, key2) {
 		t.Fatal("same password + salt should produce identical keys")
@@ -75,8 +84,8 @@ func TestArgon2idConsistentKeys(t *testing.T) {
 func TestDifferentPasswordsDifferentKeys(t *testing.T) {
 	salt := []byte("same-salt-for-both-tests-32bytes")
 
-	key1 := vault.DeriveKey("password-one", salt)
-	key2 := vault.DeriveKey("password-two", salt)
+	key1, _ := vault.DeriveKey("password-one", salt)
+	key2, _ := vault.DeriveKey("password-two", salt)
 
 	if bytes.Equal(key1, key2) {
 		t.Fatal("different passwords should produce different keys")
@@ -89,8 +98,8 @@ func TestDifferentSaltsDifferentKeys(t *testing.T) {
 	salt1 := []byte("salt-one-is-32-bytes-long-!!!!!!")
 	salt2 := []byte("salt-two-is-32-bytes-long-!!!!!!")
 
-	key1 := vault.DeriveKey(password, salt1)
-	key2 := vault.DeriveKey(password, salt2)
+	key1, _ := vault.DeriveKey(password, salt1)
+	key2, _ := vault.DeriveKey(password, salt2)
 
 	if bytes.Equal(key1, key2) {
 		t.Fatal("different salts should produce different keys")
@@ -98,7 +107,7 @@ func TestDifferentSaltsDifferentKeys(t *testing.T) {
 }
 
 func TestTamperedCiphertextFails(t *testing.T) {
-	key := vault.DeriveKey("integrity-test", []byte("salt-for-integrity-test-32bytes!"))
+	key, _ := vault.DeriveKey("integrity-test", []byte("salt-for-integrity-test-32bytes!"))
 
 	encrypted, err := vault.Encrypt([]byte("sensitive data"), key)
 	if err != nil {
@@ -118,8 +127,8 @@ func TestTamperedCiphertextFails(t *testing.T) {
 
 func TestWrongPasswordFails(t *testing.T) {
 	salt := []byte("wrong-password-test-salt-32bytes!")
-	correctKey := vault.DeriveKey("correct-password", salt)
-	wrongKey := vault.DeriveKey("wrong-password", salt)
+	correctKey, _ := vault.DeriveKey("correct-password", salt)
+	wrongKey, _ := vault.DeriveKey("wrong-password", salt)
 
 	encrypted, err := vault.Encrypt([]byte("secret message"), correctKey)
 	if err != nil {
@@ -248,7 +257,7 @@ func TestExportImportVaultRoundtrip(t *testing.T) {
 	}
 
 	salt, _ := vault.GenerateSalt()
-	key := vault.DeriveKey("export-test-password", salt)
+	key, _ := vault.DeriveKey("export-test-password", salt)
 
 	encrypted, err := vault.Encrypt(jsonData, key)
 	if err != nil {
@@ -257,13 +266,12 @@ func TestExportImportVaultRoundtrip(t *testing.T) {
 
 	packed := vault.PackExport(salt, encrypted)
 
-	// Now unpack and import into new vault
 	gotSalt, gotEncData, err := vault.UnpackExport(packed)
 	if err != nil {
 		t.Fatalf("unpacking: %v", err)
 	}
 
-	gotKey := vault.DeriveKey("export-test-password", gotSalt)
+	gotKey, _ := vault.DeriveKey("export-test-password", gotSalt)
 	decrypted, err := vault.Decrypt(gotEncData, gotKey)
 	if err != nil {
 		t.Fatalf("decrypting: %v", err)
@@ -591,7 +599,7 @@ func TestEncryptedExportFile(t *testing.T) {
 
 	password := "test-export-password"
 	salt, _ := vault.GenerateSalt()
-	key := vault.DeriveKey(password, salt)
+	key, _ := vault.DeriveKey(password, salt)
 	encrypted, _ := vault.Encrypt(jsonData, key)
 	packed := vault.PackExport(salt, encrypted)
 
@@ -599,7 +607,6 @@ func TestEncryptedExportFile(t *testing.T) {
 		t.Fatalf("writing export file: %v", err)
 	}
 
-	// Read back and decrypt
 	fileData, _ := os.ReadFile(exportPath)
 
 	gotSalt, gotEncData, err := vault.UnpackExport(fileData)
@@ -607,7 +614,7 @@ func TestEncryptedExportFile(t *testing.T) {
 		t.Fatalf("unpacking file: %v", err)
 	}
 
-	gotKey := vault.DeriveKey(password, gotSalt)
+	gotKey, _ := vault.DeriveKey(password, gotSalt)
 	decrypted, err := vault.Decrypt(gotEncData, gotKey)
 	if err != nil {
 		t.Fatalf("decrypting file: %v", err)

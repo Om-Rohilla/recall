@@ -152,7 +152,7 @@ __recall_explain_binding() {
 
 bind -x '"\C- ": __recall_search_binding'   # Ctrl+Space
 bind -x '"\C-k": __recall_vault_binding'    # Ctrl+K
-bind -x '"\C-e": __recall_explain_binding'  # Ctrl+E (overrides default end-of-line)
+bind -x '"\C-x\C-e": __recall_explain_binding'  # Ctrl+X Ctrl+E
 `
 }
 
@@ -165,8 +165,8 @@ if not set -q RECALL_SESSION_ID
 end
 
 function __recall_postexec --on-event fish_postexec
-    set -l cmd $argv[1]
     set -l exit_code $status
+    set -l cmd $argv[1]
     set -l cwd $PWD
 
     # Fish provides CMD_DURATION in milliseconds
