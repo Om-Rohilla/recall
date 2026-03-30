@@ -3,6 +3,9 @@ package capture
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +14,34 @@ import (
 	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
+// minCaptureIntervalMs is the minimum interval between captures (in ms).
+// Prevents flood attacks from malicious scripts.
+const minCaptureIntervalMs = 50
+
+// checkRateLimit uses a file-based timestamp to throttle captures.
+// Returns true if the capture should proceed, false if rate limited.
+func checkRateLimit(vaultPath string) bool {
+	log := logging.Get()
+	lockFile := filepath.Join(filepath.Dir(vaultPath), ".capture_ts")
+
+	// Read last capture timestamp
+	data, err := os.ReadFile(lockFile)
+	if err == nil {
+		if lastMs, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64); err == nil {
+			elapsed := time.Now().UnixMilli() - lastMs
+			if elapsed < minCaptureIntervalMs {
+				log.Debug("capture rate limited", "elapsed_ms", elapsed)
+				return false
+			}
+		}
+	}
+
+	// Write current timestamp
+	nowMs := fmt.Sprintf("%d", time.Now().UnixMilli())
+	_ = os.WriteFile(lockFile, []byte(nowMs), 0o600)
+	return true
+}
+
 // ProcessCommand is the main entry point for the capture pipeline.
 // It parses, filters, enriches, and stores a command.
 func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Config) error {
@@ -18,6 +49,20 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 
 	if !cfg.Capture.Enabled {
 		log.Debug("capture disabled, skipping")
+		return nil
+	}
+
+	// Input validation
+	if data == nil {
+		return fmt.Errorf("capture data is nil")
+	}
+	if len(data.RawCommand) > 10000 {
+		log.Debug("command too long, skipping", "length", len(data.RawCommand))
+		return nil
+	}
+
+	// Rate limiting — prevent flood attacks
+	if !checkRateLimit(cfg.Vault.Path) {
 		return nil
 	}
 
