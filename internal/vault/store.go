@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Om-Rohilla/recall/pkg/logging"
@@ -19,6 +21,7 @@ type Store struct {
 	path     string
 	encKey   []byte
 	tempPath string
+	sigChan  chan os.Signal
 }
 
 func NewStore(dbPath string) (*Store, error) {
@@ -86,6 +89,19 @@ func NewStore(dbPath string) (*Store, error) {
 	if encKey != nil {
 		s.encKey = encKey
 		s.tempPath = workingPath
+		// Register signal handler to securely clean up temp files on unexpected exit
+		s.sigChan = make(chan os.Signal, 1)
+		signal.Notify(s.sigChan, syscall.SIGTERM, syscall.SIGINT)
+		go func() {
+			<-s.sigChan
+			log.Warn("signal received, cleaning up temporary vault files")
+			s.db.Close()
+			secureDelete(s.tempPath)
+			for _, suffix := range []string{"-wal", "-shm"} {
+				secureDelete(s.tempPath + suffix)
+			}
+			os.Exit(1)
+		}()
 	}
 	return s, nil
 }
@@ -101,6 +117,12 @@ func randomHex(n int) string {
 func (s *Store) Close() error {
 	log := logging.Get()
 	log.Debug("closing vault", "path", s.path, "encrypted", s.encKey != nil)
+
+	// Stop signal handler before close
+	if s.sigChan != nil {
+		signal.Stop(s.sigChan)
+	}
+
 	dbCloseErr := s.db.Close()
 
 	if s.encKey != nil && s.tempPath != "" {
@@ -133,6 +155,7 @@ func (s *Store) Close() error {
 }
 
 func secureDelete(path string) {
+	log := logging.Get()
 	info, err := os.Stat(path)
 	if err != nil {
 		return
@@ -147,14 +170,21 @@ func secureDelete(path string) {
 			}
 			w, err := f.Write(zeros[:n])
 			if err != nil {
+				log.Warn("secure delete write failed", "path", path, "error", err)
 				break
 			}
 			written += int64(w)
 		}
-		f.Sync()
+		if err := f.Sync(); err != nil {
+			log.Warn("secure delete sync failed", "path", path, "error", err)
+		}
 		f.Close()
+	} else {
+		log.Warn("secure delete open failed", "path", path, "error", err)
 	}
-	os.Remove(path)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Warn("secure delete remove failed", "path", path, "error", err)
+	}
 }
 
 func (s *Store) DB() *sql.DB {
@@ -253,8 +283,8 @@ func (s *Store) SearchFTS5(query string, limit int) ([]SearchResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scanning search result: %w", err)
 		}
-		r.Command.FirstSeen, _ = time.Parse(time.RFC3339, firstSeen)
-		r.Command.LastSeen, _ = time.Parse(time.RFC3339, lastSeen)
+		r.Command.FirstSeen = safeParseTime(firstSeen)
+		r.Command.LastSeen = safeParseTime(lastSeen)
 		r.Score = -rank // FTS5 rank is negative (lower = better)
 		r.Confidence = scoreToConfidence(r.Score, r.Command.Frequency)
 		r.MatchType = "vault"
@@ -278,8 +308,8 @@ func (s *Store) GetCommand(id int64) (*Command, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting command %d: %w", id, err)
 	}
-	cmd.FirstSeen, _ = time.Parse(time.RFC3339, firstSeen)
-	cmd.LastSeen, _ = time.Parse(time.RFC3339, lastSeen)
+	cmd.FirstSeen = safeParseTime(firstSeen)
+	cmd.LastSeen = safeParseTime(lastSeen)
 	return &cmd, nil
 }
 
@@ -492,7 +522,7 @@ func (s *Store) GetContextsForCommand(commandID int64) ([]Context, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scanning context: %w", err)
 		}
-		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		ctx.Timestamp = safeParseTime(ts)
 		ctxs = append(ctxs, ctx)
 	}
 	return ctxs, rows.Err()
@@ -533,7 +563,7 @@ func (s *Store) GetContextsForCommandBatch(commandIDs []int64) (map[int64][]Cont
 		if err != nil {
 			return nil, fmt.Errorf("scanning batch context: %w", err)
 		}
-		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		ctx.Timestamp = safeParseTime(ts)
 		result[ctx.CommandID] = append(result[ctx.CommandID], ctx)
 	}
 
@@ -553,7 +583,9 @@ func (s *Store) GetMaxFrequency() (int, error) {
 }
 
 // sanitizeFTSQuery ensures a query string is safe for FTS5.
-// Accepts pre-built FTS5 queries (with OR operators) or simple terms.
+// All user terms are quoted with double quotes to prevent FTS5 operator
+// injection (OR, AND, NOT in user input are treated as literals).
+// Pre-built queries from BuildFTSQuery use OR operators between quoted terms.
 func sanitizeFTSQuery(query string) string {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -563,10 +595,14 @@ func sanitizeFTSQuery(query string) string {
 	words := strings.Fields(query)
 	var cleaned []string
 	for _, w := range words {
-		if strings.EqualFold(w, "OR") || strings.EqualFold(w, "AND") || strings.EqualFold(w, "NOT") {
-			cleaned = append(cleaned, strings.ToUpper(w))
+		// Preserve OR operators from internally-built FTS queries (BuildFTSQuery)
+		if strings.EqualFold(w, "OR") {
+			if len(cleaned) > 0 { // only add OR between terms, never leading
+				cleaned = append(cleaned, "OR")
+			}
 			continue
 		}
+		// Strip special characters that could be FTS5 syntax
 		term := strings.Map(func(r rune) rune {
 			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' {
 				return r
@@ -574,7 +610,8 @@ func sanitizeFTSQuery(query string) string {
 			return -1
 		}, w)
 		if term != "" {
-			cleaned = append(cleaned, term)
+			// Quote every term to prevent injection of AND/NOT/NEAR operators
+			cleaned = append(cleaned, `"`+term+`"`)
 		}
 	}
 
@@ -582,26 +619,23 @@ func sanitizeFTSQuery(query string) string {
 		return ""
 	}
 
-	// Remove leading/trailing operators and consecutive operators
+	// Remove trailing OR operator
+	for len(cleaned) > 0 && cleaned[len(cleaned)-1] == "OR" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+	// Remove consecutive OR operators
 	var result []string
-	prevOp := true
+	prevOR := false
 	for _, c := range cleaned {
-		isOp := c == "OR" || c == "AND" || c == "NOT"
-		if isOp && prevOp {
-			continue
+		if c == "OR" {
+			if prevOR || len(result) == 0 {
+				continue
+			}
+			prevOR = true
+		} else {
+			prevOR = false
 		}
 		result = append(result, c)
-		prevOp = isOp
-	}
-
-	// Trim trailing operator
-	for len(result) > 0 {
-		last := result[len(result)-1]
-		if last == "OR" || last == "AND" || last == "NOT" {
-			result = result[:len(result)-1]
-		} else {
-			break
-		}
 	}
 
 	if len(result) == 0 {
@@ -720,8 +754,8 @@ func (s *Store) GetVaultPeriod() (time.Time, time.Time, error) {
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("getting vault period: %w", err)
 	}
-	firstTime, _ := time.Parse(time.RFC3339, first)
-	lastTime, _ := time.Parse(time.RFC3339, last)
+	firstTime := safeParseTime(first)
+	lastTime := safeParseTime(last)
 	return firstTime, lastTime, nil
 }
 
@@ -750,8 +784,8 @@ func scanCommands(rows *sql.Rows) ([]Command, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scanning command: %w", err)
 		}
-		cmd.FirstSeen, _ = time.Parse(time.RFC3339, firstSeen)
-		cmd.LastSeen, _ = time.Parse(time.RFC3339, lastSeen)
+		cmd.FirstSeen = safeParseTime(firstSeen)
+		cmd.LastSeen = safeParseTime(lastSeen)
 		cmds = append(cmds, cmd)
 	}
 	return cmds, rows.Err()
@@ -777,7 +811,7 @@ func (s *Store) GetAllContexts() ([]Context, error) {
 		if err != nil {
 			return nil, fmt.Errorf("scanning context: %w", err)
 		}
-		ctx.Timestamp, _ = time.Parse(time.RFC3339, ts)
+		ctx.Timestamp = safeParseTime(ts)
 		ctxs = append(ctxs, ctx)
 	}
 	return ctxs, rows.Err()
@@ -954,4 +988,18 @@ func scoreToConfidence(ftsScore float64, frequency int) float64 {
 		confidence = 99
 	}
 	return confidence
+}
+
+// safeParseTime parses an RFC3339 timestamp, logging a warning on failure
+// instead of silently returning zero time.
+func safeParseTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		logging.Get().Warn("failed to parse timestamp", "value", s, "error", err)
+		return time.Time{}
+	}
+	return t
 }
