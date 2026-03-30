@@ -23,7 +23,7 @@ __recall_precmd() {
         --exit-code "$exit_code" \
         --cwd "$PWD" \
         --duration "$duration_ms" \
-        --session "$RECALL_SESSION_ID" \
+        --sesesion "$RECALL_SESSION_ID" \
         2>/dev/null &!
 
     __recall_cmd=""
