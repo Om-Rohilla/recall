@@ -48,6 +48,9 @@ func DeriveKey(password string, salt []byte) ([]byte, error) {
 	if len(salt) == 0 {
 		return nil, fmt.Errorf("salt must not be empty")
 	}
+	if len(salt) < 16 {
+		return nil, fmt.Errorf("salt too short: %d bytes (minimum 16)", len(salt))
+	}
 	return argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, KeySize), nil
 }
 
@@ -144,6 +147,7 @@ func ReadPassword(prompt string) (string, error) {
 }
 
 // ConfirmPassword reads a password twice and verifies they match.
+// Warns if password is shorter than 8 characters.
 func ConfirmPassword(prompt string) (string, error) {
 	pass1, err := ReadPassword(prompt)
 	if err != nil {
@@ -151,6 +155,9 @@ func ConfirmPassword(prompt string) (string, error) {
 	}
 	if pass1 == "" {
 		return "", fmt.Errorf("password cannot be empty")
+	}
+	if len(pass1) < 8 {
+		fmt.Println("⚠  Warning: password is shorter than 8 characters, this is insecure")
 	}
 
 	pass2, err := ReadPassword("Confirm password: ")
