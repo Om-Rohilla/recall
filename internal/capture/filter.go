@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/Om-Rohilla/recall/pkg/config"
@@ -34,19 +35,51 @@ func Filter(raw string, cfg *config.Config) FilterResult {
 // builtinSecretPatterns are always-on patterns that cannot be disabled.
 // These catch common credential formats regardless of user config.
 var builtinSecretPatterns = []string{
+	// Generic credential patterns
 	"password=", "passwd=", "token=", "secret=",
 	"api_key=", "apikey=", "aws_secret", "private_key=",
 	"credentials=", "auth_token=", "access_key=",
 	"secret_key=", "client_secret=", "encryption_key=",
-	"bearer ", "authorization:", "ghp_", "gho_", "github_token",
+	// HTTP auth headers
+	"bearer ", "authorization:", "authorization=",
+	// GitHub tokens
+	"ghp_", "gho_", "ghs_", "ghu_", "github_token", "github_pat_",
+	// OpenAI / vendor-specific prefixes
 	"sk-", "sk_live_", "sk_test_",
+	// SSH/TLS key material
 	"-----begin", "-----begin rsa", "-----begin openssh",
-	"psql://", "mongodb+srv://", "redis://:",
+	"-----begin ec private", "-----begin private",
+	// Database connection strings with credentials
+	"psql://", "postgres://", "postgresql://",
+	"mongodb+srv://", "mongodb://", "redis://:", "mysql://",
 	"://:@", "://user:pass@",
-	"xoxb-", "xoxp-", "xoxs-",
-	"azure_client_secret", "heroku_api_key",
+	// Slack
+	"xoxb-", "xoxp-", "xoxs-", "xoxa-",
+	// Cloud provider secrets
+	"azure_client_secret", "azure_tenant", "heroku_api_key",
 	"slack_token", "slack_webhook_url", "sendgrid_api_key",
 	"database_url=", "aws_session_token",
+	"gcp_service_account", "google_application_credentials",
+	// CI/CD tokens
+	"travis_token", "circle_token", "circleci_token",
+	"npm_token=", "npm_auth_token",
+	"docker_password", "docker_auth",
+	// Stripe
+	"pk_live_", "pk_test_", "rk_live_", "rk_test_",
+	// Twilio
+	"twilio_auth_token",
+	// JWT pattern (header.payload.signature)
+	"eyj",
+}
+
+// builtinSecretRegexes catch patterns that require regex matching.
+var builtinSecretRegexes = []*regexp.Regexp{
+	// Environment variable export with inline value (export KEY=value or KEY=value cmd)
+	regexp.MustCompile(`(?i)(export\s+)?[a-z_]*(?:secret|token|password|key|credential|auth)[a-z_]*\s*=\s*\S+`),
+	// Long hex strings that look like tokens (32+ chars)
+	regexp.MustCompile(`[0-9a-f]{32,}`),
+	// Connection strings with embedded passwords (user:pass@host)
+	regexp.MustCompile(`://[^/\s]+:[^/\s]+@[^/\s]+`),
 }
 
 // builtinCommandPatterns catch dangerous auth-passing CLI patterns.
@@ -86,6 +119,13 @@ func containsSecret(raw string, userPatterns []string) bool {
 					return true
 				}
 			}
+		}
+	}
+
+	// Check regex patterns for more complex credential formats
+	for _, re := range builtinSecretRegexes {
+		if re.MatchString(raw) {
+			return true
 		}
 	}
 
