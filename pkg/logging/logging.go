@@ -14,20 +14,20 @@ var (
 )
 
 // Init initializes the structured logger.
-// If RECALL_DEBUG=1, logs at Debug level to a file; otherwise discards.
-// Always writes to ~/.local/share/recall/recall.log when the file is accessible.
+// Always writes INFO-level logs to ~/.local/share/recall/recall.log.
+// If RECALL_DEBUG=1, logs at Debug level for verbose output.
 func Init() *slog.Logger {
 	once.Do(func() {
 		debug := os.Getenv("RECALL_DEBUG") == "1"
 
+		// Always log to file at INFO level for production observability.
+		// Debug mode increases verbosity.
 		var w io.Writer = io.Discard
-		if debug {
-			logPath := logFilePath()
-			dir := filepath.Dir(logPath)
-			if err := os.MkdirAll(dir, 0o700); err == nil {
-				if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-					w = f
-				}
+		logPath := logFilePath()
+		dir := filepath.Dir(logPath)
+		if err := os.MkdirAll(dir, 0o700); err == nil {
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+				w = f
 			}
 		}
 
