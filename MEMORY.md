@@ -17,9 +17,9 @@
 
 | Item | Status |
 |------|--------|
-| **Current Phase** | Phase 6 — Release & Distribution (COMPLETE) |
-| **Last thing built** | Security hardening pass: vault-at-rest encryption (RECALL_VAULT_KEY), concurrency fixes, TUI safety, secret filter hardening, schema migrations, 14 risk issues resolved. 117 tests passing. |
-| **Next thing to build** | All 6 phases complete + security hardened. Tag v0.1.0 for release. |
+| **Current Phase** | Phase 6 — Release & Distribution (COMPLETE) — v0.1.0 RELEASED |
+| **Last thing built** | v0.1.0 release: GitHub Release live with 4 platform binaries, Homebrew tap (Om-Rohilla/homebrew-tap), install script working, repo made public. |
+| **Next thing to build** | v0.1.0 launched. Gather user feedback, plan v0.2.0 features. |
 | **Blockers** | None |
 | **Known bugs** | None |
 
@@ -307,6 +307,7 @@ _(Update this after each work session so the next session knows where we left of
 | 6 | 2026-03-29 | Built ENTIRE Phase 5 Security + Export: AES-256-GCM encryption with Argon2id key derivation (crypto.go). Secure password input with terminal echo suppression (terminal.go). Export/import commands with encrypted+plain+merge modes (export_cmd.go). Config command with show/set/get/reset/path subcommands and validation (config_cmd.go). Fish shell hook with postexec capture + hotkeys (recall.fish, hooks.go). ExportData model + vault store export/import methods. 22 new tests (102 total). All passing. | Start Phase 6: Release — GoReleaser, CI/CD, install script, expanded knowledge base |
 | 7 | 2026-03-29 | Built ENTIRE Phase 6 Release & Distribution: GoReleaser config (cross-platform linux/darwin × amd64/arm64, Homebrew tap, ldflags). GitHub Actions CI (vet, test -race, build, staticcheck) + Release (tag-triggered GoReleaser). POSIX install script (OS/arch detection, checksum verify, fallback dir). Makefile targets (snapshot, release-dry-run, coverage). Knowledge base 232→504 commands across 16 categories (added security, database, aws, terraform). 11 release tests. README updates (CI badge, URLs, typos, roadmap). All tests passing. | ALL 6 PHASES COMPLETE. Tag v0.1.0 to trigger first release. |
 | 8 | 2026-03-30 | Security hardening & risk remediation (14 fixes). CRITICAL: vault-at-rest encryption via RECALL_VAULT_KEY (AES-256-GCM on DB file, secure delete of temp files); config.Reset() race fixed with mutex. HIGH: search TUI debounce (150ms), vault browser delete confirmation, FindKnowledgeBasePath rewritten with filepath.Dir. MEDIUM: enricher consolidated to internal/context, compose saves to vault, FTS5 wildcard blocked, schema migration system. LOW: SQL injection eliminated, hook scripts aligned, README corrected, 15 new secret filter patterns. 117 tests passing (15 new). | Tag v0.1.0 for release. |
+| 9 | 2026-03-30 | v0.1.0 RELEASE: Created homebrew-tap repo, fixed GoReleaser deprecations (formats, homebrew_casks, snapshot.name_template), pushed Homebrew cask manually, made repo public, verified install script + binary download + all commands working. Updated release workflow to use GH_PAT for cross-repo Homebrew push. | Gather feedback, plan v0.2.0. |
 
 ---
 
