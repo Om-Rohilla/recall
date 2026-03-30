@@ -24,7 +24,8 @@ builds:
       - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
@@ -39,7 +40,7 @@ checksum:
   algorithm: sha256
 
 snapshot:
-  version_template: "{{ incpatch .Version }}-snapshot"
+  name_template: "{{ incpatch .Version }}-snapshot"
 
 changelog:
   sort: asc
@@ -53,18 +54,15 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
+homebrew_casks:
   - repository:
       owner: Om-Rohilla
       name: homebrew-tap
     name: recall
     homepage: "https://github.com/Om-Rohilla/recall"
     description: "100% offline command intelligence for your terminal"
-    license: "MIT"
-    install: |
-      bin.install "recall"
-    test: |
-      system "#{bin}/recall", "version"
+    binaries:
+      - recall
 
 release:
   github:
