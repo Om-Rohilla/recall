@@ -5,14 +5,14 @@
     <a href="#installation">Install</a> &bull;
     <a href="#quick-start">Quick Start</a> &bull;
     <a href="#features">Features</a> &bull;
-    <a href="docs/COMMANDS.md">Commands</a> &bull;
-    <a href="docs/ARCHITECTURE.md">Architecture</a> &bull;
+    <a href="#all-commands">Commands</a> &bull;
+    <a href="#how-it-works">Architecture</a> &bull;
     <a href="#contributing">Contributing</a>
   </p>
   <p align="center">
     <a href="https://github.com/Om-Rohilla/recall/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Om-Rohilla/recall/actions/workflows/ci.yml/badge.svg"></a>
     <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg">
-    <img alt="Go Version" src="https://img.shields.io/badge/go-1.22+-00ADD8.svg">
+    <img alt="Go Version" src="https://img.shields.io/badge/go-1.24+-00ADD8.svg">
     <img alt="Platform" src="https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg">
     <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg">
     <img alt="100% Offline" src="https://img.shields.io/badge/network-100%25%20offline-success.svg">
@@ -235,8 +235,6 @@ Query: "find big files"
 
 **Response time: <10ms.** Everything runs locally against an embedded SQLite database with FTS5 full-text search.
 
-For the full technical deep-dive, see [Architecture](docs/ARCHITECTURE.md).
-
 ---
 
 ## All Commands
@@ -255,7 +253,7 @@ For the full technical deep-dive, see [Architecture](docs/ARCHITECTURE.md).
 | `recall import` | Import vault backup |
 | `recall config` | View/edit configuration |
 
-For the complete reference with all flags and examples, see [Commands](docs/COMMANDS.md).
+For the complete reference, run `recall --help` or `recall <command> --help`.
 
 ---
 
@@ -265,9 +263,12 @@ Recall takes privacy seriously:
 
 1. **Nothing leaves your machine.** Zero network calls. No telemetry. No analytics.
 2. **Vault encryption at rest** — AES-256-GCM via `RECALL_VAULT_KEY`. Exports encrypted with Argon2id key derivation. Vault files are permission-locked (0600).
-3. **Secrets are never stored** — commands containing `password`, `token`, `secret`, `API_KEY` are filtered automatically.
-4. **You own your data.** Export, delete, or inspect at any time.
-5. **Open source.** Read every line of code.
+3. **Secrets are never stored** — commands containing `password`, `token`, `secret`, `API_KEY`, JWT tokens, Stripe keys, GitHub PATs, and 50+ patterns are filtered automatically. Regex-based detection catches inline env exports and long hex strings.
+4. **FTS5 injection hardened** — all search queries are sanitized to prevent operator injection.
+5. **Crash-safe encryption** — signal handlers securely wipe temp decrypted files on SIGTERM/SIGINT.
+6. **Capture rate limiting** — prevents flood attacks (50ms minimum interval).
+7. **You own your data.** Export, delete, or inspect at any time.
+8. **Open source.** Read every line of code.
 
 ---
 
@@ -308,7 +309,7 @@ Recall takes privacy seriously:
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Go 1.22+ |
+| Language | Go 1.24+ |
 | CLI | Cobra |
 | TUI | Bubbletea + Lipgloss |
 | Storage | SQLite + FTS5 |
@@ -316,8 +317,6 @@ Recall takes privacy seriously:
 | Config | TOML |
 
 Single static binary. No runtime dependencies. No Docker. No containers.
-
-For the full tech breakdown, see [Tech Stack](docs/TECH-STACK.md).
 
 ---
 
@@ -380,7 +379,7 @@ make build
 
 ### Development Requirements
 
-- Go 1.22+
+- Go 1.24+
 - Make
 - SQLite (for testing)
 
@@ -394,6 +393,7 @@ make build
 - [x] Phase 4: Bubbletea TUI, hotkey integration, alias suggestions
 - [x] Phase 5: Encryption, export/import, Fish support
 - [x] Phase 6: Cross-platform release, GoReleaser, Homebrew, CI/CD
+- [x] Phase 7: Security hardening — FTS5 injection prevention, enhanced secret filtering (50+ patterns), capture rate limiting, crash-safe encryption, always-on logging
 
 ---
 
@@ -401,19 +401,6 @@ make build
 
 MIT License. See [LICENSE](LICENSE) for details.
 
----
-
-## Documentation
-
-| Doc | Description |
-|-----|-------------|
-| [Problem & Solution](docs/PROBLEM-AND-SOLUTION.md) | Why this tool exists |
-| [Architecture](docs/ARCHITECTURE.md) | How the intelligence engine works |
-| [Commands Reference](docs/COMMANDS.md) | Every command, flag, and option |
-| [Tech Stack](docs/TECH-STACK.md) | Languages, tools, build phases |
-| [Marketing](docs/MARKETING.md) | Positioning, pitch, launch strategy |
-
----
 
 <p align="center">
   <strong>Stop Googling commands. Start recalling them.</strong>
