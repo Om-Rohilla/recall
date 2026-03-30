@@ -13,6 +13,7 @@ vendor/
 # IDE / Editor
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
@@ -58,3 +59,9 @@ dist/
 tmp/
 *.tmp
 *.log
+
+# Internal docs & notes (keep local only)
+docs/
+MEMORY.md
+PROMPT.md
+.capture_ts
