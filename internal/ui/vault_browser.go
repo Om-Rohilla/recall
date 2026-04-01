@@ -43,6 +43,8 @@ func (s sortMode) String() string {
 	}
 }
 
+const defaultPageSize = 50
+
 type VaultBrowserModel struct {
 	store      *vault.Store
 	commands   []vault.Command
@@ -67,7 +69,14 @@ type VaultBrowserModel struct {
 
 	cachedStats *vault.VaultStats
 
-	ready   bool
+	// Pagination fields
+	page       int
+	pageSize   int
+	hasMore    bool
+	totalCount int
+	loading    bool
+
+	ready    bool
 	quitting bool
 }
 
@@ -92,6 +101,7 @@ func NewVaultBrowser(store *vault.Store, category string, sortBy string) VaultBr
 		filterCategory: category,
 		height:         24,
 		width:          80,
+		pageSize:       defaultPageSize,
 	}
 	return m
 }
@@ -99,37 +109,60 @@ func NewVaultBrowser(store *vault.Store, category string, sortBy string) VaultBr
 type commandsLoadedMsg struct {
 	commands   []vault.Command
 	categories []vault.CategoryCount
+	total      int
+	append     bool
 	err        error
 }
 
-func loadCommands(store *vault.Store, sortBy sortMode, category string) tea.Cmd {
+func loadCommandsPage(store *vault.Store, sortBy sortMode, category string, limit, offset int, appendMode bool) tea.Cmd {
 	return func() tea.Msg {
 		var cmds []vault.Command
 		var loadErr error
+		var total int
 
 		if category != "" {
-			cmds, loadErr = store.GetCommandsByCategory(category, 500)
+			cmds, loadErr = store.GetCommandsByCategoryPaginated(category, limit, offset)
+			if loadErr == nil {
+				total, _ = store.GetCommandCountByCategory(category)
+			}
 		} else {
-			cmds, loadErr = store.GetAllCommands(sortBy.String(), 500)
+			cmds, loadErr = store.GetCommandsPaginated(sortBy.String(), limit, offset)
+			if loadErr == nil {
+				total, _ = store.GetCommandCount()
+			}
 		}
 
 		cats, _ := store.GetCategories()
 
-		return commandsLoadedMsg{commands: cmds, categories: cats, err: loadErr}
+		return commandsLoadedMsg{
+			commands:   cmds,
+			categories: cats,
+			total:      total,
+			append:     appendMode,
+			err:        loadErr,
+		}
 	}
 }
 
 func (m VaultBrowserModel) Init() tea.Cmd {
-	return loadCommands(m.store, m.sort, m.filterCategory)
+	return loadCommandsPage(m.store, m.sort, m.filterCategory, m.pageSize, 0, false)
 }
 
 func (m VaultBrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case commandsLoadedMsg:
-		m.commands = msg.commands
-		m.categories = msg.categories
+		if msg.append {
+			m.commands = append(m.commands, msg.commands...)
+		} else {
+			m.commands = msg.commands
+			m.categories = msg.categories
+			m.cachedStats, _ = m.store.GetStats()
+		}
+		m.totalCount = msg.total
+		m.hasMore = len(m.commands) < m.totalCount
+		m.page = len(m.commands) / m.pageSize
 		m.filtered = m.applyFilter()
-		m.cachedStats, _ = m.store.GetStats()
+		m.loading = false
 		m.ready = true
 		return m, nil
 
@@ -146,6 +179,24 @@ func (m VaultBrowserModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// maybeLoadMore checks if the cursor is near the bottom and triggers lazy loading.
+func (m *VaultBrowserModel) maybeLoadMore() tea.Cmd {
+	if !m.hasMore || m.loading {
+		return nil
+	}
+	// Load more when within 5 items of the end of filtered results
+	threshold := len(m.filtered) - 5
+	if threshold < 0 {
+		threshold = 0
+	}
+	if m.cursor >= threshold {
+		m.loading = true
+		offset := len(m.commands)
+		return loadCommandsPage(m.store, m.sort, m.filterCategory, m.pageSize, offset, true)
+	}
+	return nil
 }
 
 func (m VaultBrowserModel) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -179,7 +230,8 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			}
 			m.confirmDelete = false
 			m.deleteTargetID = 0
-			return m, loadCommands(m.store, m.sort, m.filterCategory)
+			m.page = 0
+			return m, loadCommandsPage(m.store, m.sort, m.filterCategory, m.pageSize, 0, false)
 		default:
 			m.confirmDelete = false
 			m.deleteTargetID = 0
@@ -251,6 +303,10 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 				m.offset = m.cursor - viewable + 1
 			}
 		}
+		// Trigger lazy loading when near bottom
+		if loadCmd := m.maybeLoadMore(); loadCmd != nil {
+			return m, loadCmd
+		}
 		return m, nil
 
 	case "pgup":
@@ -272,6 +328,10 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		if m.cursor >= m.offset+viewable {
 			m.offset = m.cursor - viewable + 1
 		}
+		// Trigger lazy loading when near bottom
+		if loadCmd := m.maybeLoadMore(); loadCmd != nil {
+			return m, loadCmd
+		}
 		return m, nil
 
 	case "home", "g":
@@ -286,6 +346,10 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		if m.cursor >= viewable {
 			m.offset = m.cursor - viewable + 1
 		}
+		// Trigger lazy loading when jumping to end
+		if loadCmd := m.maybeLoadMore(); loadCmd != nil {
+			return m, loadCmd
+		}
 		return m, nil
 
 	case "enter":
@@ -295,7 +359,8 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			m.view = viewList
 			m.cursor = 0
 			m.offset = 0
-			return m, loadCommands(m.store, m.sort, m.filterCategory)
+			m.page = 0
+			return m, loadCommandsPage(m.store, m.sort, m.filterCategory, m.pageSize, 0, false)
 		}
 		return m, nil
 
@@ -317,7 +382,6 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		}
 		return m, nil
 
-
 	case "s":
 		switch m.sort {
 		case sortRecency:
@@ -329,14 +393,16 @@ func (m VaultBrowserModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 		}
 		m.cursor = 0
 		m.offset = 0
-		return m, loadCommands(m.store, m.sort, m.filterCategory)
+		m.page = 0
+		return m, loadCommandsPage(m.store, m.sort, m.filterCategory, m.pageSize, 0, false)
 
 	case "backspace":
 		if m.filterCategory != "" {
 			m.filterCategory = ""
 			m.cursor = 0
 			m.offset = 0
-			return m, loadCommands(m.store, m.sort, "")
+			m.page = 0
+			return m, loadCommandsPage(m.store, m.sort, "", m.pageSize, 0, false)
 		}
 		return m, nil
 	}
@@ -504,6 +570,11 @@ func (m VaultBrowserModel) renderList() string {
 		}
 	}
 
+	// Loading indicator
+	if m.loading {
+		lines = append(lines, DimStyle.Render("   ⏳ Loading more commands..."))
+	}
+
 	return "\n" + strings.Join(lines, "\n")
 }
 
@@ -654,7 +725,11 @@ func (m VaultBrowserModel) renderStatusBar() string {
 	switch m.view {
 	case viewList:
 		if len(m.filtered) > 0 {
-			pos = DimStyle.Render(fmt.Sprintf(" %d/%d ", m.cursor+1, len(m.filtered)))
+			if m.totalCount > 0 && m.totalCount != len(m.filtered) {
+				pos = DimStyle.Render(fmt.Sprintf(" %d/%d (of %d) ", m.cursor+1, len(m.filtered), m.totalCount))
+			} else {
+				pos = DimStyle.Render(fmt.Sprintf(" %d/%d ", m.cursor+1, len(m.filtered)))
+			}
 		}
 	case viewCategories:
 		if len(m.categories) > 0 {

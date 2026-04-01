@@ -672,6 +672,69 @@ func (s *Store) GetAllCommands(sortBy string, limit int) ([]Command, error) {
 	return scanCommands(rows)
 }
 
+// GetCommandsPaginated returns a page of commands with the given sort order.
+func (s *Store) GetCommandsPaginated(sortBy string, limit, offset int) ([]Command, error) {
+	const baseQuery = `SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration FROM commands`
+
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	switch sortBy {
+	case "frequency":
+		rows, err = s.db.Query(baseQuery+` ORDER BY frequency DESC LIMIT ? OFFSET ?`, limit, offset)
+	case "alpha":
+		rows, err = s.db.Query(baseQuery+` ORDER BY raw ASC LIMIT ? OFFSET ?`, limit, offset)
+	default:
+		rows, err = s.db.Query(baseQuery+` ORDER BY last_seen DESC LIMIT ? OFFSET ?`, limit, offset)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("getting paginated commands: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+// GetCommandsByCategoryPaginated returns a page of commands filtered by category.
+func (s *Store) GetCommandsByCategoryPaginated(category string, limit, offset int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE category = ? ORDER BY frequency DESC LIMIT ? OFFSET ?`, category, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting paginated commands by category: %w", err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+// GetCommandCount returns the total number of commands in the vault.
+func (s *Store) GetCommandCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM commands").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("getting command count: %w", err)
+	}
+	return count, nil
+}
+
+// GetCommandCountByCategory returns the total number of commands in a category.
+func (s *Store) GetCommandCountByCategory(category string) (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM commands WHERE category = ?", category).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("getting command count by category: %w", err)
+	}
+	return count, nil
+}
+
 func (s *Store) GetCommandsByCategory(category string, limit int) ([]Command, error) {
 	if limit <= 0 {
 		limit = 200
