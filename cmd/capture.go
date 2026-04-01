@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -41,13 +40,6 @@ func runCapture(cmd *cobra.Command, args []string) error {
 	}
 
 	cfg := config.Get()
-
-	store, err := vault.NewStore(cfg.Vault.Path)
-	if err != nil {
-		return fmt.Errorf("opening vault: %w", err)
-	}
-	defer store.Close()
-
 	exitCode, _ := strconv.Atoi(captureExitCode)
 	durationMs, _ := strconv.Atoi(captureDuration)
 
@@ -60,5 +52,5 @@ func runCapture(cmd *cobra.Command, args []string) error {
 		SessionID:  captureSession,
 	}
 
-	return capture.ProcessCommand(store, data, cfg)
+	return capture.AppendAndTryFlush(data, cfg)
 }

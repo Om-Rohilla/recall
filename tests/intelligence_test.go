@@ -343,7 +343,8 @@ func TestSearchEngineIntegration(t *testing.T) {
 				Limit:     5,
 				VaultOnly: true,
 			}
-			results, err := intelligence.Search(store, tt.query, ctx, opts)
+			engine := intelligence.NewEngine(store)
+			results, err := engine.Search(tt.query, ctx, opts)
 			if err != nil {
 				t.Fatalf("Search(%q) failed: %v", tt.query, err)
 			}
@@ -381,7 +382,8 @@ func TestSearchWithKnowledgeBase(t *testing.T) {
 		KBOnly: true,
 	}
 
-	results, err := intelligence.Search(store, "find big files over 100mb", ctx, opts)
+	engine := intelligence.NewEngine(store)
+	results, err := engine.Search("find big files over 100mb", ctx, opts)
 	if err != nil {
 		t.Fatalf("Search with KB failed: %v", err)
 	}

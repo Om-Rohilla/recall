@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 var pragmas = []string{
 	"PRAGMA journal_mode = WAL",
@@ -47,8 +47,16 @@ CREATE TABLE IF NOT EXISTS contexts (
     session_id    TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_packs (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    version       TEXT NOT NULL,
+    installed_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS knowledge (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pack_id       TEXT DEFAULT 'core' REFERENCES knowledge_packs(id) ON DELETE CASCADE,
     command       TEXT NOT NULL,
     description   TEXT NOT NULL,
     intents       TEXT NOT NULL DEFAULT '[]',
@@ -73,6 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_contexts_command_id ON contexts(command_id);
 CREATE INDEX IF NOT EXISTS idx_contexts_timestamp ON contexts(timestamp);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_command ON knowledge(command);
+CREATE INDEX IF NOT EXISTS idx_knowledge_pack_id ON knowledge(pack_id);
 `
 
 const createFTS = `
@@ -158,6 +167,19 @@ var migrations = []migration{
 		);
 		CREATE INDEX IF NOT EXISTS idx_alias_suggestions_alias ON alias_suggestions(alias);`,
 	},
+	{
+		version: 4,
+		sql: `
+		CREATE TABLE IF NOT EXISTS knowledge_packs (
+			id            TEXT PRIMARY KEY,
+			name          TEXT NOT NULL,
+			version       TEXT NOT NULL,
+			installed_at  TEXT NOT NULL
+		);
+		INSERT OR IGNORE INTO knowledge_packs (id, name, version, installed_at) VALUES ('core', 'Core Built-ins', '1.0.0', datetime('now'));
+		ALTER TABLE knowledge ADD COLUMN pack_id TEXT DEFAULT 'core' REFERENCES knowledge_packs(id) ON DELETE CASCADE;
+		CREATE INDEX IF NOT EXISTS idx_knowledge_pack_id ON knowledge(pack_id);`,
+	},
 }
 
 func initSchema(db *sql.DB) error {
@@ -195,6 +217,9 @@ func initSchema(db *sql.DB) error {
 	if count == 0 {
 		if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion); err != nil {
 			return fmt.Errorf("inserting schema version: %w", err)
+		}
+		if _, err := db.Exec("INSERT OR IGNORE INTO knowledge_packs (id, name, version, installed_at) VALUES ('core', 'Core Built-ins', '1.0.0', datetime('now'))"); err != nil {
+			return fmt.Errorf("inserting core knowledge pack: %w", err)
 		}
 	}
 

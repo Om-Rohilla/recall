@@ -91,7 +91,8 @@ func executeSearch(args []string) error {
 		KBPath:    kbPath,
 	}
 
-	results, err := intelligence.Search(store, query, currentCtx, opts)
+	engine := intelligence.NewEngine(store)
+	results, err := engine.Search(query, currentCtx, opts)
 	if err != nil {
 		return fmt.Errorf("searching: %w", err)
 	}

@@ -11,17 +11,25 @@ import (
 	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
-var (
+type Engine struct {
+	store    *vault.Store
 	kbMu     sync.Mutex
 	kbLoaded bool
-)
+}
+
+// NewEngine creates a new intelligence engine.
+func NewEngine(store *vault.Store) *Engine {
+	return &Engine{
+		store: store,
+	}
+}
 
 // ResetKnowledgeBase allows the knowledge base to be reloaded on next search.
 // Call this after updating the knowledge base file on disk.
-func ResetKnowledgeBase() {
-	kbMu.Lock()
-	kbLoaded = false
-	kbMu.Unlock()
+func (e *Engine) ResetKnowledgeBase() {
+	e.kbMu.Lock()
+	e.kbLoaded = false
+	e.kbMu.Unlock()
 }
 
 type SearchOptions struct {
@@ -37,7 +45,7 @@ type SearchOptions struct {
 // 2. Candidate fetch (FTS5 on vault + knowledge base)
 // 3. Multi-signal scoring
 // 4. Rank and return
-func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, opts SearchOptions) ([]vault.SearchResult, error) {
+func (e *Engine) Search(query string, currentCtx appctx.CurrentContext, opts SearchOptions) ([]vault.SearchResult, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = 10
 	}
@@ -49,7 +57,7 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 		return nil, nil
 	}
 
-	maxFreq, _ := store.GetMaxFrequency()
+	maxFreq, _ := e.store.GetMaxFrequency()
 	fetchLimit := opts.Limit * 5
 
 	var scored []ScoredResult
@@ -57,7 +65,7 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 
 	// Stage 2a: Fetch vault candidates
 	if !opts.KBOnly {
-		vaultResults, err := store.SearchFTS5(ftsQuery, fetchLimit)
+		vaultResults, err := e.store.SearchFTS5(ftsQuery, fetchLimit)
 		if err != nil {
 			vaultErr = err
 		} else {
@@ -65,7 +73,7 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 			for _, r := range vaultResults {
 				cmdIDs = append(cmdIDs, r.Command.ID)
 			}
-			ctxMap := batchGetContexts(store, cmdIDs)
+			ctxMap := batchGetContexts(e.store, cmdIDs)
 
 			for _, r := range vaultResults {
 				input := ScoringInput{
@@ -83,15 +91,15 @@ func Search(store *vault.Store, query string, currentCtx appctx.CurrentContext, 
 	// Stage 2b: Fetch knowledge base candidates
 	if !opts.VaultOnly {
 		if opts.KBPath != "" {
-			kbMu.Lock()
-			if !kbLoaded {
-				LoadKnowledgeBase(store, opts.KBPath)
-				kbLoaded = true
+			e.kbMu.Lock()
+			if !e.kbLoaded {
+				LoadKnowledgeBase(e.store, opts.KBPath)
+				e.kbLoaded = true
 			}
-			kbMu.Unlock()
+			e.kbMu.Unlock()
 		}
 
-		kbResults, err := store.SearchKnowledgeFTS5(ftsQuery, fetchLimit)
+		kbResults, err := e.store.SearchKnowledgeFTS5(ftsQuery, fetchLimit)
 		if err != nil {
 			kbErr = err
 		} else {

@@ -72,7 +72,8 @@ func doSearch(store *vault.Store, query string, kbPath string) tea.Cmd {
 			KBPath: kbPath,
 		}
 
-		results, err := intelligence.Search(store, query, currentCtx, opts)
+		engine := intelligence.NewEngine(store)
+		results, err := engine.Search(query, currentCtx, opts)
 		if err != nil {
 			return searchResultsMsg{}
 		}
