@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	appctx "github.com/Om-Rohilla/recall/internal/context"
 	"github.com/Om-Rohilla/recall/internal/intelligence"
 	"github.com/Om-Rohilla/recall/internal/ui"
@@ -110,7 +112,21 @@ func executeSearch(args []string) error {
 		return enc.Encode(results)
 	}
 
-	fmt.Println(ui.RenderResultList(results))
+	// Launch interactive result browser with working keybindings
+	model := ui.NewResultBrowser(results)
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
+		// Fallback to static output if TUI fails
+		fmt.Println(ui.RenderResultList(results))
+		return nil
+	}
+
+	if m, ok := finalModel.(ui.ResultBrowserModel); ok {
+		if copied := m.CopiedCommand(); copied != "" {
+			fmt.Printf("\n  ✅ Copied to clipboard: %s\n\n", copied)
+		}
+	}
 
 	return nil
 }
