@@ -1289,3 +1289,50 @@ func (s *Store) StreamContexts(callback func(Context) error) error {
 	}
 	return rows.Err()
 }
+
+// ContextStats holds aggregated statistics about stored execution contexts.
+type ContextStats struct {
+	TotalContexts    int
+	UniqueCwds       int
+	UniqueGitRepos   int
+	UniqueSessions   int
+	EarliestContext  time.Time
+}
+
+// GetContextStats retrieves overall context metadata.
+func (s *Store) GetContextStats() (*ContextStats, error) {
+	row := s.db.QueryRow(`
+		SELECT 
+			COUNT(*),
+			COUNT(DISTINCT cwd),
+			COUNT(DISTINCT NULLIF(git_repo, '')),
+			COUNT(DISTINCT NULLIF(session_id, '')),
+			MIN(timestamp)
+		FROM contexts`)
+		
+	var stats ContextStats
+	var earliestStr sql.NullString
+	if err := row.Scan(&stats.TotalContexts, &stats.UniqueCwds, &stats.UniqueGitRepos, &stats.UniqueSessions, &earliestStr); err != nil {
+		return nil, fmt.Errorf("getting context stats: %w", err)
+	}
+
+	if earliestStr.Valid && earliestStr.String != "" {
+		stats.EarliestContext = safeParseTime(earliestStr.String)
+	}
+	
+	return &stats, nil
+}
+
+// PruneOrphanedContexts deletes contexts that reference a command ID that no longer exists.
+// Returns the number of pruned contexts.
+func (s *Store) PruneOrphanedContexts() (int, error) {
+	result, err := s.db.Exec(`
+		DELETE FROM contexts 
+		WHERE command_id NOT IN (SELECT id FROM commands)`)
+	if err != nil {
+		return 0, fmt.Errorf("pruning orphaned contexts: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	return int(affected), nil
+}
+
