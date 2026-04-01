@@ -489,7 +489,7 @@ func (m VaultBrowserModel) renderList() string {
 		}
 
 		freqStr := fmt.Sprintf("%dx", cmd.Frequency)
-		catStr := cmd.Category
+		catStr := CategoryIcon(cmd.Category) + " " + cmd.Category
 
 		if isSelected {
 			prefix := SelectedItemStyle.Render(" > ")
@@ -541,7 +541,7 @@ func (m VaultBrowserModel) renderCategories() string {
 		}
 		bar := FrequencyBarStyle.Render(strings.Repeat("█", barLen))
 
-		label := fmt.Sprintf("%-15s %3d cmds  %5.1f%%  ", cat.Category, cat.Count, pct)
+		label := fmt.Sprintf("%-2s %-13s %3d cmds  %5.1f%%  ", CategoryIcon(cat.Category), cat.Category, cat.Count, pct)
 
 		if isSelected {
 			prefix := SelectedItemStyle.Render(" > ")

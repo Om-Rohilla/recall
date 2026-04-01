@@ -60,8 +60,7 @@ tmp/
 *.tmp
 *.log
 
-# Internal docs & notes (keep local only)
-docs/
+# Internal notes (keep local only)
 MEMORY.md
 PROMPT.md
 .capture_ts

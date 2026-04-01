@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/Om-Rohilla/recall/pkg/shell"
@@ -80,17 +81,32 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("✅ Recall initialized successfully!")
+	fmt.Println(ui.SuccessStyle.Render("✅ Recall initialized successfully!"))
+	fmt.Println()
+
+	// Welcome banner
+	fmt.Println(ui.BorderStyle.Render(
+		ui.TitleStyle.Render("🧠 Welcome to Recall!") + "\n\n" +
+			ui.MetadataStyle.Render("  Your terminal now has perfect memory.") + "\n" +
+			ui.MetadataStyle.Render("  Every command you run will be captured, indexed, and") + "\n" +
+			ui.MetadataStyle.Render("  searchable by intent — 100% offline, 100% private."),
+	))
 	fmt.Println()
 
 	if !initNoImport {
-		fmt.Println("💡 Import your existing shell history for instant results:")
-		fmt.Printf("   recall import-history\n")
+		fmt.Println(ui.HintStyle.Render("💡 Quick Start:"))
+		fmt.Println(ui.CommandStyle.Render("   1. recall import-history") + ui.MetadataStyle.Render("   ← Import existing commands for instant results"))
+		fmt.Println(ui.CommandStyle.Render("   2. recall \"find files\"") + ui.MetadataStyle.Render("     ← Search by intent, not syntax"))
+		fmt.Println(ui.CommandStyle.Render("   3. recall vault") + ui.MetadataStyle.Render("           ← Browse your command vault"))
 		fmt.Println()
 	}
 
-	fmt.Println("🚀 Restart your shell or run:")
-	fmt.Printf("   source %s\n", shellInfo.ConfigPath)
+	fmt.Println(ui.HintStyle.Render("🚀 Restart your shell or run:"))
+	fmt.Println("   " + ui.CommandStyle.Render(fmt.Sprintf("source %s", shellInfo.ConfigPath)))
+	fmt.Println()
+
+	fmt.Println(ui.HintStyle.Render("💬 Enable tab completions:"))
+	fmt.Println(ui.CommandStyle.Render(fmt.Sprintf("   eval \"$(recall completion %s)\"", shellInfo.Shell)))
 	fmt.Println()
 
 	// Create config directory if it doesn't exist

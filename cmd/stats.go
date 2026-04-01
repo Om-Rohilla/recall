@@ -47,6 +47,7 @@ type StatsOutput struct {
 	TopCommands    []vault.Command      `json:"top_commands"`
 	Categories     []vault.CategoryCount `json:"categories"`
 	RareCommands   []vault.Command      `json:"rare_commands"`
+	Streak         *vault.StreakInfo     `json:"streak,omitempty"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
@@ -84,6 +85,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	if statsJSON {
+		streak, _ := store.GetCurrentStreak()
 		output := StatsOutput{
 			TotalCommands:  stats.TotalCommands,
 			UniqueCommands: stats.UniqueCommands,
@@ -91,6 +93,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 			TopCommands:    topCmds,
 			Categories:     categories,
 			RareCommands:   rareCmds,
+			Streak:         &streak,
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -119,6 +122,8 @@ func runStats(cmd *cobra.Command, args []string) error {
 		uiRare[i] = ui.StatsCommand{Raw: c.Raw, Frequency: c.Frequency}
 	}
 
-	fmt.Println(ui.RenderStats(stats.TotalCommands, stats.UniqueCommands, captureDays, period, uiTopCmds, uiCats, uiRare))
+	streak, _ := store.GetCurrentStreak()
+
+	fmt.Println(ui.RenderStats(stats.TotalCommands, stats.UniqueCommands, captureDays, period, uiTopCmds, uiCats, uiRare, &streak))
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Om-Rohilla/recall/internal/explain"
+	"github.com/Om-Rohilla/recall/internal/vault"
 )
 
 func RenderShortExplain(result explain.ExplainResult) string {
@@ -110,7 +111,7 @@ func RenderFullExplain(result explain.ExplainResult, showWarnings bool) string {
 	return BorderStyle.Render(content)
 }
 
-func RenderStats(totalCommands, uniqueCommands, captureDays, period int, topCmds []StatsCommand, categories []StatsCategory, rareCmds []StatsCommand) string {
+func RenderStats(totalCommands, uniqueCommands, captureDays, period int, topCmds []StatsCommand, categories []StatsCategory, rareCmds []StatsCommand, streak *vault.StreakInfo) string {
 	var lines []string
 
 	lines = append(lines, TitleStyle.Render("Recall Stats"))
@@ -125,6 +126,24 @@ func RenderStats(totalCommands, uniqueCommands, captureDays, period int, topCmds
 		lines = append(lines, MetadataStyle.Render(fmt.Sprintf(
 			"  Capture period: %s",
 			HintStyle.Render(fmt.Sprintf("%d days", captureDays)),
+		)))
+	}
+
+	// Streak display
+	if streak != nil && streak.CurrentStreak > 0 {
+		streakLine := fmt.Sprintf("  %s %s-day streak!",
+			streak.StreakEmoji,
+			CommandStyle.Render(fmt.Sprintf("%d", streak.CurrentStreak)),
+		)
+		if streak.LongestStreak > streak.CurrentStreak {
+			streakLine += MetadataStyle.Render(fmt.Sprintf("  (best: %d days)", streak.LongestStreak))
+		}
+		lines = append(lines, SuccessStyle.Render(streakLine))
+	}
+	if streak != nil && streak.TodayCount > 0 {
+		lines = append(lines, MetadataStyle.Render(fmt.Sprintf(
+			"  Today: %s commands captured",
+			HintStyle.Render(fmt.Sprintf("%d", streak.TodayCount)),
 		)))
 	}
 

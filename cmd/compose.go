@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/atotto/clipboard"
 
 	"github.com/Om-Rohilla/recall/internal/compose"
 	"github.com/Om-Rohilla/recall/internal/explain"
@@ -92,9 +95,59 @@ func runCompose(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Println()
-	fmt.Println(ui.HintStyle.Render("  [c] Copy  [e] Edit  [x] Explain  [q] Quit"))
-	fmt.Println()
+	// Interactive post-action menu
+	for {
+		fmt.Println()
+		fmt.Println(ui.HintStyle.Render("  [Enter] Execute  [c] Copy  [e] Edit  [x] Explain  [q] Quit"))
+		fmt.Print("  > ")
 
-	return nil
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		switch input {
+		case "", "enter":
+			// Execute the composed command
+			fmt.Println()
+			fmt.Println(ui.HintStyle.Render("  ▸ Executing: ") + ui.CommandStyle.Render(composed))
+			fmt.Println()
+			return ui.ExecuteCommand(composed)
+
+		case "c":
+			if err := clipboard.WriteAll(composed); err != nil {
+				fmt.Println(ui.ErrorStyle.Render("  ✗ Could not copy to clipboard: " + err.Error()))
+			} else {
+				fmt.Println(ui.SuccessStyle.Render("  ✓ Copied to clipboard!"))
+			}
+			continue
+
+		case "e":
+			edited, editErr := ui.EditCommand(composed)
+			if editErr != nil {
+				fmt.Println(ui.ErrorStyle.Render("  ✗ Error opening editor: " + editErr.Error()))
+				continue
+			}
+			if edited != "" && edited != composed {
+				composed = edited
+				fmt.Println()
+				fmt.Println(ui.TitleStyle.Render("  Updated command:"))
+				fmt.Println("  " + ui.CommandStyle.Render(composed))
+			} else {
+				fmt.Println(ui.MetadataStyle.Render("  No changes made."))
+			}
+			continue
+
+		case "x":
+			explainResult := explain.Explain(composed)
+			fmt.Println()
+			fmt.Println(ui.RenderFullExplain(explainResult, true))
+			continue
+
+		case "q":
+			return nil
+
+		default:
+			fmt.Println(ui.MetadataStyle.Render("  Unknown action. Use c/e/x/q or press Enter to execute."))
+			continue
+		}
+	}
 }
