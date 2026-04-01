@@ -1202,3 +1202,90 @@ func (s *Store) CheckAliasAdoption(rawCommand string) error {
 	}
 	return nil
 }
+
+// StreamCommands executes the given callback for each command in the database.
+// This is used for memory-efficient exports. If the callback returns an error, streaming stops.
+func (s *Store) StreamCommands(callback func(Command) error) error {
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands ORDER BY id ASC`,
+	)
+	if err != nil {
+		return fmt.Errorf("querying commands for stream: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c Command
+		var flagsStr, firstStr, lastStr string
+		var lastExit sql.NullInt64
+		var avgDur sql.NullFloat64
+
+		if err := rows.Scan(
+			&c.ID, &c.Raw, &c.Binary, &c.Subcommand, &flagsStr, &c.Category,
+			&c.Frequency, &firstStr, &lastStr, &lastExit, &avgDur,
+		); err != nil {
+			return fmt.Errorf("scanning command stream: %w", err)
+		}
+		
+		c.FirstSeen = safeParseTime(firstStr)
+		c.LastSeen = safeParseTime(lastStr)
+		c.Flags = flagsStr
+		if lastExit.Valid {
+			ex := int(lastExit.Int64)
+			c.LastExit = &ex
+		}
+		if avgDur.Valid {
+			c.AvgDuration = &avgDur.Float64
+		}
+
+		if err := callback(c); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// StreamContexts executes the given callback for each context in the database.
+func (s *Store) StreamContexts(callback func(Context) error) error {
+	rows, err := s.db.Query(
+		`SELECT id, command_id, cwd, git_repo, git_branch, project_type, timestamp, exit_code, duration_ms, session_id
+		 FROM contexts ORDER BY id ASC`,
+	)
+	if err != nil {
+		return fmt.Errorf("querying contexts for stream: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c Context
+		var tsStr string
+		var sessionId sql.NullString
+		var exitCode sql.NullInt64
+		var durMs sql.NullInt64
+
+		if err := rows.Scan(
+			&c.ID, &c.CommandID, &c.Cwd, &c.GitRepo, &c.GitBranch,
+			&c.ProjectType, &tsStr, &exitCode, &durMs, &sessionId,
+		); err != nil {
+			return fmt.Errorf("scanning context stream: %w", err)
+		}
+		c.Timestamp = safeParseTime(tsStr)
+		if sessionId.Valid {
+			c.SessionID = sessionId.String
+		}
+		if exitCode.Valid {
+			ex := int(exitCode.Int64)
+			c.ExitCode = &ex
+		}
+		if durMs.Valid {
+			dm := int(durMs.Int64)
+			c.DurationMs = &dm
+		}
+
+		if err := callback(c); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}

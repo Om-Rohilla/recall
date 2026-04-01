@@ -15,6 +15,7 @@ var (
 	exportPassword     string
 	exportPlain        bool
 	exportCommandsOnly bool
+	exportFormat       string
 )
 
 var exportCmd = &cobra.Command{
@@ -37,6 +38,7 @@ func init() {
 	exportCmd.Flags().StringVar(&exportPassword, "password", "", "encryption password (prompted if not given)")
 	exportCmd.Flags().BoolVar(&exportPlain, "plain", false, "export as unencrypted JSON")
 	exportCmd.Flags().BoolVar(&exportCommandsOnly, "commands-only", false, "export only commands, skip contexts/patterns")
+	exportCmd.Flags().StringVar(&exportFormat, "format", "json", "export format: json or ndjson")
 	_ = exportCmd.MarkFlagRequired("output")
 	rootCmd.AddCommand(exportCmd)
 }
@@ -52,6 +54,19 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("opening vault: %w", err)
 	}
 	defer store.Close()
+
+	if exportFormat == "ndjson" {
+		f, err := os.Create(exportOutput)
+		if err != nil {
+			return fmt.Errorf("creating ndjson file: %w", err)
+		}
+		defer f.Close()
+		if err := store.ExportNDJSON(f, exportCommandsOnly); err != nil {
+			return fmt.Errorf("streaming ndjson export: %w", err)
+		}
+		fmt.Printf("Export streamed to %s (ndjson)\n", exportOutput)
+		return nil
+	}
 
 	data, err := store.ExportVaultData(exportCommandsOnly)
 	if err != nil {
@@ -118,6 +133,7 @@ var (
 	importInput    string
 	importPassword string
 	importMerge    bool
+	importFormat   string
 )
 
 var importCmd = &cobra.Command{
@@ -138,6 +154,7 @@ func init() {
 	importCmd.Flags().StringVar(&importInput, "input", "", "input file path (required)")
 	importCmd.Flags().StringVar(&importPassword, "password", "", "decryption password (prompted if not given)")
 	importCmd.Flags().BoolVar(&importMerge, "merge", false, "merge with existing vault instead of replace")
+	importCmd.Flags().StringVar(&importFormat, "format", "json", "import format: json or ndjson")
 	_ = importCmd.MarkFlagRequired("input")
 	rootCmd.AddCommand(importCmd)
 }
@@ -147,6 +164,30 @@ func runImport(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(os.Stderr, "Warning: --password is visible in your process table. Use the interactive prompt instead for better security.")
 	}
 	cfg := config.Get()
+
+	store, err := vault.NewStore(cfg.Vault.Path)
+	if err != nil {
+		return fmt.Errorf("opening vault: %w", err)
+	}
+	defer store.Close()
+
+	if importFormat == "ndjson" {
+		if !importMerge {
+			fmt.Println("Warning: NDJSON imports simply append to the existing vault. To replace, clear the vault first.")
+		}
+		f, err := os.Open(importInput)
+		if err != nil {
+			return fmt.Errorf("opening ndjson file: %w", err)
+		}
+		defer f.Close()
+
+		importedCmds, importedCtxs, err := store.ImportNDJSON(f)
+		if err != nil {
+			return fmt.Errorf("streaming ndjson import: %w", err)
+		}
+		fmt.Printf("Streamed %d commands, %d contexts from %s\n", importedCmds, importedCtxs, importInput)
+		return nil
+	}
 
 	fileData, err := os.ReadFile(importInput)
 	if err != nil {
@@ -184,12 +225,6 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(jsonData, &exportData); err != nil {
 		return fmt.Errorf("parsing import data: %w", err)
 	}
-
-	store, err := vault.NewStore(cfg.Vault.Path)
-	if err != nil {
-		return fmt.Errorf("opening vault: %w", err)
-	}
-	defer store.Close()
 
 	action := "Replaced"
 	if importMerge {
