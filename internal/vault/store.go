@@ -1066,3 +1066,36 @@ func safeParseTime(s string) time.Time {
 	}
 	return t
 }
+
+// Vacuum runs SQLite VACUUM to reclaim unused space and defragment the database.
+func (s *Store) Vacuum() error {
+	if _, err := s.db.Exec("PRAGMA incremental_vacuum"); err != nil {
+		return fmt.Errorf("incremental vacuum: %w", err)
+	}
+	if _, err := s.db.Exec("VACUUM"); err != nil {
+		return fmt.Errorf("vacuum: %w", err)
+	}
+	return nil
+}
+
+// PruneOldCommands deletes commands whose last_seen is older than daysOld days.
+// Returns the number of deleted commands.
+func (s *Store) PruneOldCommands(daysOld int) (int, error) {
+	cutoff := time.Now().UTC().AddDate(0, 0, -daysOld).Format(time.RFC3339)
+	result, err := s.db.Exec("DELETE FROM commands WHERE last_seen < ?", cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("pruning old commands: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	return int(affected), nil
+}
+
+// VaultFileSize returns the size of the vault database file in bytes.
+func (s *Store) VaultFileSize() (int64, error) {
+	info, err := os.Stat(s.path)
+	if err != nil {
+		return 0, fmt.Errorf("stat vault file: %w", err)
+	}
+	return info.Size(), nil
+}
+
