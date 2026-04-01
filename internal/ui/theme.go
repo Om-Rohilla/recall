@@ -27,6 +27,11 @@ var (
 			BorderForeground(ColorPrimary).
 			Padding(1, 2)
 
+	SelectedBorderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColorSuccess).
+				Padding(1, 2)
+
 	TitleStyle = lipgloss.NewStyle().
 			Foreground(ColorPrimary).
 			Bold(true)
@@ -121,6 +126,7 @@ func init() {
 	if noColor {
 		plain := lipgloss.NewStyle()
 		BorderStyle = lipgloss.NewStyle().Padding(1, 2)
+		SelectedBorderStyle = lipgloss.NewStyle().Padding(1, 2)
 		TitleStyle = plain
 		CommandStyle = plain
 		MetadataStyle = plain
