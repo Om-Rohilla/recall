@@ -282,3 +282,34 @@ type AliasSuggestion struct {
 	Alias     string
 	Frequency int
 }
+
+func RenderAliasStats(stats []vault.AliasSuggestion) string {
+	if len(stats) == 0 {
+		return DimStyle.Render("  No alias suggestions tracked yet. Run 'recall suggest-aliases' to generate some.")
+	}
+
+	var lines []string
+	lines = append(lines, TitleStyle.Render("  Alias Adoption Stats"))
+	lines = append(lines, "")
+
+	for _, s := range stats {
+		status := DimStyle.Render("Suggested")
+		if s.AdoptionCount > 0 {
+			status = SuccessStyle.Render(fmt.Sprintf("Adopted %dx", s.AdoptionCount))
+		}
+
+		cmd := s.Command
+		if len(cmd) > 40 {
+			cmd = cmd[:37] + "..."
+		}
+
+		lines = append(lines, fmt.Sprintf("  %s %s='%s' %s",
+			status,
+			AccentStyle.Render(s.Alias),
+			CommandStyle.Render(cmd),
+			DimStyle.Render(fmt.Sprintf("(since %s)", s.SuggestedAt[:10])),
+		))
+	}
+
+	return strings.Join(lines, "\n")
+}

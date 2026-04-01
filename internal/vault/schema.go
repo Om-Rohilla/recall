@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 var pragmas = []string{
 	"PRAGMA journal_mode = WAL",
@@ -144,6 +144,19 @@ var migrations = []migration{
 	{
 		version: 2,
 		sql:     `PRAGMA secure_delete = ON; PRAGMA auto_vacuum = INCREMENTAL;`,
+	},
+	{
+		version: 3,
+		sql: `CREATE TABLE IF NOT EXISTS alias_suggestions (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			command         TEXT NOT NULL,
+			alias           TEXT NOT NULL,
+			suggested_at    TEXT NOT NULL,
+			adopted_at      TEXT,
+			adoption_count  INTEGER DEFAULT 0,
+			UNIQUE(command, alias)
+		);
+		CREATE INDEX IF NOT EXISTS idx_alias_suggestions_alias ON alias_suggestions(alias);`,
 	},
 }
 

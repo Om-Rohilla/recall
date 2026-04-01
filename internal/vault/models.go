@@ -47,6 +47,16 @@ type Pattern struct {
 	SuggestedAlias string `json:"suggested_alias,omitempty"`
 }
 
+// AliasSuggestion tracks a suggested alias and its adoption status.
+type AliasSuggestion struct {
+	ID            int64  `json:"id"`
+	Command       string `json:"command"`
+	Alias         string `json:"alias"`
+	SuggestedAt   string `json:"suggested_at"`
+	AdoptedAt     string `json:"adopted_at,omitempty"`
+	AdoptionCount int    `json:"adoption_count"`
+}
+
 type SearchResult struct {
 	Command    Command `json:"command"`
 	Score      float64 `json:"score"`

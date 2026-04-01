@@ -15,6 +15,7 @@ var (
 	suggestMinFreq int
 	suggestDryRun  bool
 	suggestShell   string
+	suggestStats   bool
 )
 
 var suggestCmd = &cobra.Command{
@@ -35,6 +36,7 @@ func init() {
 	suggestCmd.Flags().IntVar(&suggestMinFreq, "min-freq", 0, "minimum frequency to suggest (default: from config)")
 	suggestCmd.Flags().BoolVar(&suggestDryRun, "dry-run", false, "show suggestions without writing to shell config")
 	suggestCmd.Flags().StringVar(&suggestShell, "shell", "", "target shell (auto-detected)")
+	suggestCmd.Flags().BoolVar(&suggestStats, "stats", false, "show alias adoption statistics")
 	rootCmd.AddCommand(suggestCmd)
 }
 
@@ -46,6 +48,15 @@ func runSuggest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("opening vault: %w", err)
 	}
 	defer store.Close()
+
+	if suggestStats {
+		stats, err := store.GetAliasSuggestionStats()
+		if err != nil {
+			return fmt.Errorf("getting alias stats: %w", err)
+		}
+		fmt.Println("\n" + ui.RenderAliasStats(stats) + "\n")
+		return nil
+	}
 
 	minFreq := cfg.Alias.MinFrequency
 	if suggestMinFreq > 0 {
@@ -69,6 +80,9 @@ func runSuggest(cmd *cobra.Command, args []string) error {
 
 	uiSuggestions := make([]ui.AliasSuggestion, len(suggestions))
 	for i, s := range suggestions {
+		if !suggestDryRun {
+			_ = store.InsertAliasSuggestion(s.Command, s.Alias)
+		}
 		uiSuggestions[i] = ui.AliasSuggestion{Command: s.Command, Alias: s.Alias, Frequency: s.Frequency}
 	}
 	fmt.Println(ui.RenderAliasSuggestions(uiSuggestions))

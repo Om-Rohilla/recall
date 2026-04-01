@@ -1142,3 +1142,63 @@ func (s *Store) GetCategoriesSince(since time.Time) ([]string, error) {
 	}
 	return cats, rows.Err()
 }
+
+// InsertAliasSuggestion records a new alias suggestion or ignores if it already exists.
+func (s *Store) InsertAliasSuggestion(command, alias string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`INSERT OR IGNORE INTO alias_suggestions (command, alias, suggested_at)
+		 VALUES (?, ?, ?)`,
+		command, alias, now,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting alias suggestion: %w", err)
+	}
+	return nil
+}
+
+// GetAliasSuggestionStats retrieves all alias suggestions and their adoption stats.
+func (s *Store) GetAliasSuggestionStats() ([]AliasSuggestion, error) {
+	rows, err := s.db.Query(
+		`SELECT id, command, alias, suggested_at, COALESCE(adopted_at, ''), adoption_count
+		 FROM alias_suggestions
+		 ORDER BY adoption_count DESC, suggested_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting alias suggestion stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []AliasSuggestion
+	for rows.Next() {
+		var a AliasSuggestion
+		if err := rows.Scan(&a.ID, &a.Command, &a.Alias, &a.SuggestedAt, &a.AdoptedAt, &a.AdoptionCount); err != nil {
+			return nil, fmt.Errorf("scanning alias suggestion: %w", err)
+		}
+		stats = append(stats, a)
+	}
+	return stats, rows.Err()
+}
+
+// CheckAliasAdoption checks if the rawCommand matches any suggested alias and marks it as adopted.
+func (s *Store) CheckAliasAdoption(rawCommand string) error {
+	// A basic check: if the user typed the exact alias, or the alias followed by a space
+	// We'll update any suggestion where the alias matches the first word.
+	parts := strings.Fields(rawCommand)
+	if len(parts) == 0 {
+		return nil
+	}
+	usedAlias := parts[0]
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`UPDATE alias_suggestions
+		 SET adopted_at = ?, adoption_count = adoption_count + 1
+		 WHERE alias = ?`,
+		now, usedAlias,
+	)
+	if err != nil {
+		return fmt.Errorf("updating alias adoption: %w", err)
+	}
+	return nil
+}

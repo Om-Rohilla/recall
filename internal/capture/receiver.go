@@ -138,6 +138,9 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 		return fmt.Errorf("storing context: %w", err)
 	}
 
+	// Check if this command execution represents the user adopting a suggested alias
+	_ = store.CheckAliasAdoption(data.RawCommand)
+
 	return nil
 }
 
