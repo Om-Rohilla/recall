@@ -1099,3 +1099,46 @@ func (s *Store) VaultFileSize() (int64, error) {
 	return info.Size(), nil
 }
 
+// GetNewCommandsSince returns commands whose first_seen is after the given time.
+func (s *Store) GetNewCommandsSince(since time.Time, limit int) ([]Command, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	sinceStr := since.Format(time.RFC3339)
+	rows, err := s.db.Query(
+		`SELECT id, raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration
+		 FROM commands WHERE first_seen >= ? ORDER BY first_seen DESC LIMIT ?`, sinceStr, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting new commands since %s: %w", sinceStr, err)
+	}
+	defer rows.Close()
+	return scanCommands(rows)
+}
+
+// GetCategoriesSince returns category names that first appeared after the given time.
+// A category "first appeared" if the earliest first_seen among its commands is after since.
+func (s *Store) GetCategoriesSince(since time.Time) ([]string, error) {
+	sinceStr := since.Format(time.RFC3339)
+	rows, err := s.db.Query(
+		`SELECT category FROM commands
+		 WHERE category != ''
+		 GROUP BY category
+		 HAVING MIN(first_seen) >= ?
+		 ORDER BY COUNT(*) DESC`, sinceStr,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting categories since %s: %w", sinceStr, err)
+	}
+	defer rows.Close()
+
+	var cats []string
+	for rows.Next() {
+		var cat string
+		if err := rows.Scan(&cat); err != nil {
+			return nil, fmt.Errorf("scanning category: %w", err)
+		}
+		cats = append(cats, cat)
+	}
+	return cats, rows.Err()
+}
