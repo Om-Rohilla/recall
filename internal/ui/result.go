@@ -39,7 +39,10 @@ func RenderResultCard(r vault.SearchResult, isBest bool) string {
 		metadata = MetadataStyle.Render("  " + strings.Join(metaParts, "  |  "))
 	}
 
-	hints := HintStyle.Render("  [c] Copy  [Tab] More results")
+	hints := ""
+	if isBest {
+		hints = HintStyle.Render("  💡 Use --top 3 for more results")
+	}
 
 	var lines []string
 	lines = append(lines, title)
@@ -49,8 +52,10 @@ func RenderResultCard(r vault.SearchResult, isBest bool) string {
 		lines = append(lines, "")
 		lines = append(lines, metadata)
 	}
-	lines = append(lines, "")
-	lines = append(lines, hints)
+	if hints != "" {
+		lines = append(lines, "")
+		lines = append(lines, hints)
+	}
 
 	content := strings.Join(lines, "\n")
 
