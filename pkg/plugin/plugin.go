@@ -1,17 +1,20 @@
 package plugin
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/Om-Rohilla/recall/pkg/logging"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// Plugin represents an executable that extends Recall.
+// Plugin represents a WASM executable module that extends Recall securely.
 type Plugin struct {
 	Name    string   `json:"name"`
 	Path    string   `json:"path"`
@@ -47,7 +50,7 @@ func (r *Registry) Dir() string {
 	return r.dir
 }
 
-// List discovers and queries all installed plugins.
+// List discovers and queries all installed WASM plugins.
 func (r *Registry) List() ([]Plugin, error) {
 	entries, err := os.ReadDir(r.dir)
 	if err != nil {
@@ -63,12 +66,12 @@ func (r *Registry) List() ([]Plugin, error) {
 			continue
 		}
 
-		path := filepath.Join(r.dir, entry.Name())
-		info, err := entry.Info()
-		if err != nil || info.Mode()&0111 == 0 {
-			continue // Not executable
+		// Security: Only execute strict .wasm modules
+		if !strings.HasSuffix(entry.Name(), ".wasm") {
+			continue
 		}
 
+		path := filepath.Join(r.dir, entry.Name())
 		p := r.queryPlugin(path, entry.Name())
 		plugins = append(plugins, p)
 	}
@@ -76,24 +79,43 @@ func (r *Registry) List() ([]Plugin, error) {
 	return plugins, nil
 }
 
-// queryPlugin asks the executable for its metadata via the '--recall-plugin-info' flag.
+// queryPlugin asks the WASM module for its metadata via the '--recall-plugin-info' flag.
+// Uses `wazero` to securely sandbox the plugin. It has ZERO system access except stdout.
 func (r *Registry) queryPlugin(path string, fallbackName string) Plugin {
 	p := Plugin{Name: fallbackName, Path: path, Version: "unknown", Hooks: []string{}}
 	
-	cmd := exec.Command(path, "--recall-plugin-info")
-	out, err := cmd.Output()
+	ctx := context.Background()
+	wasmBytes, err := os.ReadFile(path)
 	if err != nil {
-		logging.Get().Debug("plugin failed to respond to info query", "path", path, "error", err)
-		return p // Return basic info if query fails
+		logging.Get().Debug("failed to read wasm plugin", "path", path, "error", err)
+		return p
 	}
-	
-	// Try parsing JSON output
+
+	runtime := wazero.NewRuntime(ctx)
+	defer runtime.Close(ctx)
+
+	// Instantiate WASI preview 1, which provides standard out/err/in capabilities.
+	wasi_snapshot_preview1.MustInstantiate(ctx, runtime)
+
+	var stdoutBuf bytes.Buffer
+	config := wazero.NewModuleConfig().
+		WithName(fallbackName).
+		WithArgs(fallbackName, "--recall-plugin-info").
+		WithStdout(&stdoutBuf) // Securely capture only what the plugin prints
+		// Notice: WithFS, WithEnv, WithNet are entirely omitted, guaranteeing isolation.
+
+	_, err = runtime.InstantiateWithConfig(ctx, wasmBytes, config)
+	if err != nil {
+		// WASI exit code != 0 are returned as errors, but if stdoutBuf has our data, we don't care.
+		logging.Get().Debug("wasm instantiation completed with note", "err", err)
+	}
+
 	var metadata struct {
 		Name    string   `json:"name"`
 		Version string   `json:"version"`
 		Hooks   []string `json:"hooks"`
 	}
-	if err := json.Unmarshal(out, &metadata); err == nil {
+	if err := json.Unmarshal(stdoutBuf.Bytes(), &metadata); err == nil {
 		if metadata.Name != "" {
 			p.Name = metadata.Name
 		}
@@ -101,6 +123,8 @@ func (r *Registry) queryPlugin(path string, fallbackName string) Plugin {
 			p.Version = metadata.Version
 		}
 		p.Hooks = metadata.Hooks
+	} else {
+		logging.Get().Debug("plugin JSON parse failed", "output", stdoutBuf.String())
 	}
 	
 	return p

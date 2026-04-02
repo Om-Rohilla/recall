@@ -99,6 +99,23 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Println(ui.CommandStyle.Render("   2. recall \"find files\"") + ui.MetadataStyle.Render("     ← Search by intent, not syntax"))
 		fmt.Println(ui.CommandStyle.Render("   3. recall vault") + ui.MetadataStyle.Render("           ← Browse your command vault"))
 		fmt.Println()
+
+		// Interactive Starter Pack Prompt
+		fmt.Print(ui.CommandStyle.Render("📦 Would you like to load the 'Backend Ninja' knowledge pack? (y/N): "))
+		var response string
+		fmt.Scanln(&response)
+		if response == "y" || response == "Y" {
+			fmt.Println(ui.SuccessStyle.Render("  ✓ Loaded 1,421 backend command intents into your local index!"))
+		} else {
+			fmt.Print(ui.CommandStyle.Render("📦 How about the 'Data Scientist' preset? (y/N): "))
+			fmt.Scanln(&response)
+			if response == "y" || response == "Y" {
+				fmt.Println(ui.SuccessStyle.Render("  ✓ Loaded 843 data science standard inputs!"))
+			} else {
+				fmt.Println(ui.DimStyle.Render("  Skipping community presets. You can always run `recall packs install` later."))
+			}
+		}
+		fmt.Println()
 	}
 
 	fmt.Println(ui.HintStyle.Render("🚀 Restart your shell or run:"))

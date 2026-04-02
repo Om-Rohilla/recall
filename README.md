@@ -245,9 +245,13 @@ Query: "find big files"
 | `recall explain "cmd"` | Break down a command |
 | `recall vault` | Browse your command vault (TUI) |
 | `recall stats` | Usage statistics |
+| `recall wrapped` | View your Weekly Terminal Wrapped |
+| `recall roast` | Let the engine playfully roast your CLI habits |
+| `recall share "cmd"` | Generate a gorgeous SVG image of a command to share |
 | `recall suggest-aliases` | Get alias suggestions |
 | `recall compose` | Build a command interactively |
-| `recall init` | First-time setup |
+| `recall sync` | E2E Cloud Sync your vault across devices via GitHub Gists |
+| `recall init` | First-time setup & Knowledge Pack installation |
 | `recall import-history` | Import existing shell history |
 | `recall export` | Export vault (encrypted) |
 | `recall import` | Import vault backup |
@@ -314,9 +318,22 @@ Recall takes privacy seriously:
 | TUI | Bubbletea + Lipgloss |
 | Storage | SQLite + FTS5 |
 | Encryption | AES-256-GCM |
+| Sync | GitHub Gists (E2E Encrypted) |
+| Plugins | Pure WASM (`wazero` WASI) |
 | Config | TOML |
 
-Single static binary. No runtime dependencies. No Docker. No containers.
+Single static binary. No runtime dependencies. No Docker. No network calls by default.
+
+---
+
+## 🔌 Ecosystem & Plugins (WASM Sandboxed)
+
+Recall supports deeply integrated community commands, securely.
+Because developers run sensitive code, Recall utilizes **Pure WebAssembly (WASI)** to load plugins.
+
+- **Zero-Access Architecture:** Plugins cannot access your file system, network, or environment variables.
+- **Native Speeds:** Compiled directly via `wazero`.
+- Build a `.wasm` file using Go, Rust, or Zig and drop it into `~/.local/share/recall/plugins`.
 
 ---
 
@@ -393,7 +410,8 @@ make build
 - [x] Phase 4: Bubbletea TUI, hotkey integration, alias suggestions
 - [x] Phase 5: Encryption, export/import, Fish support
 - [x] Phase 6: Cross-platform release, GoReleaser, Homebrew, CI/CD
-- [x] Phase 7: Security hardening — FTS5 injection prevention, enhanced secret filtering (50+ patterns), capture rate limiting, crash-safe encryption, always-on logging
+- [x] Phase 7: Security hardening — FTS5 injection prevention, enhanced secret filtering (50+ patterns), rate limiting, crash-safe.
+- [x] Phase 8: **The Badass Transformation** — Ghost Cloud Sync, Viral SVG `recall share`, `recall roast`, zero-I/O DB locking, and pure WASM strict plugin sandboxing. (Production Ready / v1.0.0)
 
 ---
 

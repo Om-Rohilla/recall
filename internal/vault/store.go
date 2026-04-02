@@ -123,6 +123,11 @@ func (s *Store) Close() error {
 		signal.Stop(s.sigChan)
 	}
 
+	// Automated DB Janitor: Run PRAGMA optimize before closing to maintain query plan efficiency
+	if _, err := s.db.Exec("PRAGMA optimize;"); err != nil {
+		log.Debug("failed to run pragma optimize", "error", err)
+	}
+
 	dbCloseErr := s.db.Close()
 
 	if s.encKey != nil && s.tempPath != "" {

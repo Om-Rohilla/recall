@@ -8,6 +8,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Om-Rohilla/recall/internal/vault"
 )
@@ -163,8 +164,13 @@ func (m SearchInteractiveModel) View() string {
 		confStr := fmt.Sprintf("%.0f%%", r.Confidence)
 		confStyled := ConfidenceStyle(r.Confidence).Render(confStr)
 
+		// Micro-Interaction: ✨ Sparkle heavily on near-perfect matches (Cuteness Engineering)
+		if r.Confidence > 94 {
+			confStyled = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C")).Bold(true).Render("✨ " + confStr)
+		}
+
 		raw := r.Command.Raw
-		maxLen := m.width - 25
+		maxLen := m.width - 30
 		if maxLen < 30 {
 			maxLen = 30
 		}
@@ -172,18 +178,27 @@ func (m SearchInteractiveModel) View() string {
 			raw = raw[:maxLen-3] + "..."
 		}
 
+		icon := CategoryIcon(r.Command.Category)
+
 		if isSelected {
-			prefix := SelectedItemStyle.Render(" ▸ ")
-			cmdText := CommandStyle.Render(raw)
+			prefix := SelectedItemStyle.Render(" ▸ " + icon + " ")
+			
+			// Neon Border Effect around selected text if perfectly matched
+			cmdStyle := CommandStyle
+			if r.Confidence > 94 {
+				cmdStyle = cmdStyle.Copy().Foreground(lipgloss.Color("#FF79C6")).Bold(true).Underline(true)
+			}
+			cmdText := cmdStyle.Render(raw)
+
 			b.WriteString(prefix + cmdText + "  " + confStyled + "\n")
 
 			// Show metadata for selected item
 			var meta []string
 			if r.Command.Frequency > 1 {
-				meta = append(meta, fmt.Sprintf("Used %dx", r.Command.Frequency))
+				meta = append(meta, fmt.Sprintf("⌨️  Used %dx", r.Command.Frequency))
 			}
 			if r.Command.Category != "" && r.Command.Category != "other" {
-				meta = append(meta, CategoryIcon(r.Command.Category)+" "+CategoryStyle.Render(r.Command.Category))
+				meta = append(meta, CategoryStyle.Render(strings.ToUpper(r.Command.Category)))
 			}
 			if !r.Command.LastSeen.IsZero() {
 				meta = append(meta, relativeTime(r.Command.LastSeen))
@@ -192,10 +207,11 @@ func (m SearchInteractiveModel) View() string {
 				meta = append(meta, DimStyle.Render("via "+r.MatchType))
 			}
 			if len(meta) > 0 {
-				b.WriteString("    " + MetadataStyle.Render(strings.Join(meta, "  │  ")) + "\n")
+				// Indented metadata under the command
+				b.WriteString("       " + MetadataStyle.Render(strings.Join(meta, "  │  ")) + "\n")
 			}
 		} else {
-			b.WriteString("   " + NormalItemStyle.Render(raw) + "  " + confStyled + "\n")
+			b.WriteString("   " + icon + " " + NormalItemStyle.Render(raw) + "  " + confStyled + "\n")
 		}
 	}
 
