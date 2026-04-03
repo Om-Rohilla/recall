@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/Om-Rohilla/recall/internal/ui"
+	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -44,11 +46,21 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading local queue: %w", err)
 	}
 
+	key, err := vault.GetOrGenerateVaultKey()
+	if err != nil {
+		return fmt.Errorf("getting vault key for sync crypto: %w", err)
+	}
+	encData, err := vault.Encrypt(data, key)
+	if err != nil {
+		return fmt.Errorf("encrypting sync data: %w", err)
+	}
+	payloadStr := base64.StdEncoding.EncodeToString(encData)
+
 	gistID := os.Getenv("RECALL_GIST_ID")
 	if gistID == "" {
 		// Create new gist
-		fmt.Println(ui.DimStyle.Render("Creating new secure Ghost Sync Gist..."))
-		newID, err := createGist(token, string(data))
+		fmt.Println(ui.DimStyle.Render("Creating new secure E2E Encrypted Ghost Sync Gist..."))
+		newID, err := createGist(token, payloadStr)
 		if err != nil {
 			return err
 		}
@@ -58,7 +70,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Update existing gist to push our local pending edits
 	fmt.Println(ui.DimStyle.Render(fmt.Sprintf("Syncing to Ghost Gist (ID: %s)...", gistID)))
-	if err := updateGist(token, gistID, string(data)); err != nil {
+	if err := updateGist(token, gistID, payloadStr); err != nil {
 		return err
 	}
 
@@ -78,10 +90,10 @@ type gistPayload struct {
 
 func createGist(token, content string) (string, error) {
 	payload := gistPayload{
-		Description: "Recall CLI - Ghost Sync Vault",
+		Description: "Recall CLI - E2E Encrypted Sync Vault",
 		Public:      false,
 		Files: map[string]gistFile{
-			"pending.ndjson": {Content: content},
+			"pending.ndjson.enc": {Content: content},
 		},
 	}
 	b, _ := json.Marshal(payload)
@@ -110,9 +122,9 @@ func createGist(token, content string) (string, error) {
 
 func updateGist(token, id, content string) error {
 	payload := gistPayload{
-		Description: "Recall CLI - Ghost Sync Vault",
+		Description: "Recall CLI - E2E Encrypted Sync Vault",
 		Files: map[string]gistFile{
-			"pending.ndjson": {Content: content},
+			"pending.ndjson.enc": {Content: content},
 		},
 	}
 	b, _ := json.Marshal(payload)

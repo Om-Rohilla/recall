@@ -8,10 +8,10 @@ LDFLAGS=-ldflags "-X github.com/Om-Rohilla/recall/cmd.Version=$(VERSION) -X gith
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	go build -tags sqlite_fts5 $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 
 test:
-	go test ./... -v -count=1
+	go test -tags sqlite_fts5 ./... -v -count=1
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -31,7 +31,7 @@ lint: vet
 	staticcheck ./... 2>/dev/null || true
 
 run:
-	go run . $(ARGS)
+	go run -tags sqlite_fts5 . $(ARGS)
 
 snapshot:
 	goreleaser release --snapshot --clean
@@ -40,5 +40,5 @@ release-dry-run:
 	goreleaser check
 
 coverage:
-	go test ./... -coverprofile=coverage.out
+	go test -tags sqlite_fts5 ./... -coverprofile=coverage.out
 	go tool cover -html=coverage.out

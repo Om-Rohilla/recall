@@ -93,7 +93,8 @@ func computeTextRelevance(intent Intent, cmd vault.Command, ftsRank float64) flo
 	}
 
 	// Trigram similarity between query and command
-	trigramScore := trigramSimilarity(strings.Join(intent.Tokens, " "), cmd.Raw)
+	queryLen := len(strings.Join(intent.Tokens, " "))
+	trigramScore := trigramSimilarityFast(intent.Trigrams, queryLen, cmd.Raw)
 
 	return clamp(ftsScore*0.4 + tokenOverlap*0.4 + trigramScore*0.2)
 }
@@ -209,8 +210,9 @@ func computeContextScore(contexts []vault.Context, current appctx.CurrentContext
 		// Same or child directory
 		if current.Cwd != "" && ctx.Cwd != "" {
 			if ctx.Cwd == current.Cwd {
-				score += 0.25
-			} else if strings.HasPrefix(current.Cwd, ctx.Cwd) || strings.HasPrefix(ctx.Cwd, current.Cwd) {
+				score += 0.45
+			} else if strings.HasPrefix(current.Cwd, ctx.Cwd) {
+				// E.g., context is in /project/src, user is in /project/src/components
 				score += 0.15
 			}
 		}
@@ -246,43 +248,26 @@ func computeRecencyScore(lastSeen time.Time) float64 {
 	}
 }
 
-func trigramSimilarity(a, b string) float64 {
-	if a == "" || b == "" {
+func trigramSimilarityFast(intentTrigrams map[string]bool, queryLen int, b string) float64 {
+	if len(intentTrigrams) == 0 || b == "" {
 		return 0
 	}
 
-	a = strings.ToLower(a)
 	b = strings.ToLower(b)
-
-	if len(a) < 3 || len(b) < 3 {
-		if strings.Contains(b, a) || strings.Contains(a, b) {
-			shorter := len(a)
-			if len(b) < shorter {
-				shorter = len(b)
-			}
-			longer := len(a)
-			if len(b) > longer {
-				longer = len(b)
-			}
-			return float64(shorter) / float64(longer)
-		}
-		if a == b {
-			return 1.0
-		}
+	if queryLen < 3 || len(b) < 3 {
 		return 0
 	}
 
-	triA := trigrams(a)
 	triB := trigrams(b)
 
 	intersection := 0
-	for tri := range triA {
+	for tri := range intentTrigrams {
 		if triB[tri] {
 			intersection++
 		}
 	}
 
-	union := len(triA) + len(triB) - intersection
+	union := len(intentTrigrams) + len(triB) - intersection
 	if union == 0 {
 		return 0
 	}

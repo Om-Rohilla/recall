@@ -6,14 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/Om-Rohilla/recall/pkg/logging"
-	_ "modernc.org/sqlite"
+	_ "github.com/mutecomm/go-sqlcipher/v4"
 )
 
 type Store struct {
@@ -33,62 +31,22 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("creating vault directory: %w", err)
 	}
 
-	encPath := dbPath + ".enc"
-	var encKey []byte
-	var workingPath string
+	encKey, err := GetOrGenerateVaultKey()
+	if err != nil {
+		return nil, fmt.Errorf("getting vault key: %w", err)
+	}
+	keyHex := hex.EncodeToString(encKey)
 
-	keyHex := os.Getenv("RECALL_VAULT_KEY")
-	if keyHex == "" {
-		if configDir, err := os.UserConfigDir(); err == nil {
-			keyPath := filepath.Join(configDir, "recall", "vault.key")
-			if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-				if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err == nil {
-					newKey := make([]byte, KeySize)
-					if _, err := rand.Read(newKey); err == nil {
-						keyHex = hex.EncodeToString(newKey)
-						_ = os.WriteFile(keyPath, []byte(keyHex), 0o600)
-					}
-				}
-			} else {
-				if data, err := os.ReadFile(keyPath); err == nil {
-					keyHex = string(data)
-				}
-			}
-		}
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening vault database: %w", err)
 	}
 
 	if keyHex != "" {
-		var err error
-		encKey, err = hex.DecodeString(keyHex)
-		if err != nil || len(encKey) != KeySize {
-			return nil, fmt.Errorf("RECALL_VAULT_KEY (or generated key) must be a %d-byte hex string (%d hex chars)", KeySize, KeySize*2)
+		if _, err := db.Exec(fmt.Sprintf("PRAGMA key = '%s';", keyHex)); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("setting vault key: %w", err)
 		}
-
-		if _, err := os.Stat(encPath); err == nil {
-			encData, err := os.ReadFile(encPath)
-			if err != nil {
-				return nil, fmt.Errorf("reading encrypted vault: %w", err)
-			}
-			plainData, err := Decrypt(encData, encKey)
-			if err != nil {
-				return nil, fmt.Errorf("decrypting vault: %w", err)
-			}
-			workingPath = dbPath + ".tmp." + randomHex(8)
-			if err := os.WriteFile(workingPath, plainData, 0o600); err != nil {
-				return nil, fmt.Errorf("writing decrypted vault: %w", err)
-			}
-		} else if _, err := os.Stat(dbPath); err == nil {
-			workingPath = dbPath
-		} else {
-			workingPath = dbPath + ".tmp." + randomHex(8)
-		}
-	} else {
-		workingPath = dbPath
-	}
-
-	db, err := sql.Open("sqlite", workingPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening vault database: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)
@@ -98,30 +56,13 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("initializing schema: %w", err)
 	}
 
-	if workingPath == dbPath {
-		if err := os.Chmod(dbPath, 0o600); err != nil && !os.IsNotExist(err) {
-			db.Close()
-			return nil, fmt.Errorf("setting vault file permissions: %w", err)
-		}
+	if err := os.Chmod(dbPath, 0o600); err != nil && !os.IsNotExist(err) {
+		log.Debug("failed to set vault permissions", "err", err)
 	}
 
 	s := &Store{db: db, path: dbPath}
 	if encKey != nil {
 		s.encKey = encKey
-		s.tempPath = workingPath
-		// Register signal handler to securely clean up temp files on unexpected exit
-		s.sigChan = make(chan os.Signal, 1)
-		signal.Notify(s.sigChan, syscall.SIGTERM, syscall.SIGINT)
-		go func() {
-			<-s.sigChan
-			log.Warn("signal received, cleaning up temporary vault files")
-			s.db.Close()
-			secureDelete(s.tempPath)
-			for _, suffix := range []string{"-wal", "-shm"} {
-				secureDelete(s.tempPath + suffix)
-			}
-			os.Exit(1)
-		}()
 	}
 	return s, nil
 }
@@ -138,45 +79,12 @@ func (s *Store) Close() error {
 	log := logging.Get()
 	log.Debug("closing vault", "path", s.path, "encrypted", s.encKey != nil)
 
-	// Stop signal handler before close
-	if s.sigChan != nil {
-		signal.Stop(s.sigChan)
-	}
-
 	// Automated DB Janitor: Run PRAGMA optimize before closing to maintain query plan efficiency
 	if _, err := s.db.Exec("PRAGMA optimize;"); err != nil {
 		log.Debug("failed to run pragma optimize", "error", err)
 	}
 
-	dbCloseErr := s.db.Close()
-
-	if s.encKey != nil && s.tempPath != "" {
-		cleanupTemp := func() {
-			secureDelete(s.tempPath)
-			for _, suffix := range []string{"-wal", "-shm"} {
-				secureDelete(s.tempPath + suffix)
-			}
-		}
-
-		plainData, err := os.ReadFile(s.tempPath)
-		if err != nil {
-			cleanupTemp()
-			return fmt.Errorf("reading vault for encryption: %w", err)
-		}
-		encData, err := Encrypt(plainData, s.encKey)
-		if err != nil {
-			cleanupTemp()
-			return fmt.Errorf("encrypting vault: %w", err)
-		}
-		encPath := s.path + ".enc"
-		if err := os.WriteFile(encPath, encData, 0o600); err != nil {
-			cleanupTemp()
-			return fmt.Errorf("writing encrypted vault: %w", err)
-		}
-		cleanupTemp()
-	}
-
-	return dbCloseErr
+	return s.db.Close()
 }
 
 func secureDelete(path string) {

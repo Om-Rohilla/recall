@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"math"
 	"regexp"
 	"strings"
 
@@ -149,11 +150,73 @@ func isNoise(raw string, excludeList []string) bool {
 
 	for _, excluded := range excludeList {
 		if binary == excluded {
-			// Only filter bare commands — "cd" is noise but "cd /some/important/path" might not be
-			// For Phase 1, filter all instances of excluded commands
 			return true
 		}
 	}
-
 	return false
 }
+
+// SanitizeSecrets scans the command for high-entropy tokens and signature
+// matches, redacting them inline to preserve command structure.
+func SanitizeSecrets(raw string, cfg *config.Config) string {
+	// 1. Regex replacements (e.g. export AWS_SECRET=XXX)
+	for _, re := range builtinSecretRegexes {
+		raw = re.ReplaceAllStringFunc(raw, func(match string) string {
+			idx := strings.Index(match, "=")
+			if idx > 0 {
+				return match[:idx+1] + "[REDACTED_SECRET]"
+			}
+			idx = strings.Index(match, ":")
+			if idx > 0 {
+				return match[:idx+1] + "[REDACTED_SECRET]"
+			}
+			return "[REDACTED_SECRET]"
+		})
+	}
+
+	// 2. High Entropy Token Replacement
+	// Matches typical base64, hex, or token alphabets > 16 chars
+	tokenRe := regexp.MustCompile(`[a-zA-Z0-9_\-\.\+]{16,}`)
+	raw = tokenRe.ReplaceAllStringFunc(raw, func(match string) string {
+		if shannonEntropy(match) > 4.5 {
+			return "[REDACTED_SECRET]"
+		}
+		return match
+	})
+
+	// 3. User & Builtin Secret Patterns (Prefix stripping)
+	// (Note: this is brute force, but effective for things missed by entropy, like short tokens)
+	for _, prefix := range builtinSecretPatterns {
+		idx := strings.Index(strings.ToLower(raw), prefix)
+		if idx >= 0 && !strings.Contains(strings.ToLower(raw), "[redacted") {
+			// If it matches a known bad prefix and wasn't caught by entropy, it's safer to redact everything after it
+			// Or we fall back to filtering the whole command.
+			// Let's just redact the immediate next word.
+			after := raw[idx+len(prefix):]
+			fields := strings.Fields(after)
+			if len(fields) > 0 {
+				raw = strings.Replace(raw, fields[0], "[REDACTED_SECRET]", 1)
+			}
+		}
+	}
+
+	return raw
+}
+
+func shannonEntropy(data string) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	counts := make(map[rune]int)
+	for _, char := range data {
+		counts[char]++
+	}
+	var entropy float64
+	length := float64(len(data))
+	for _, count := range counts {
+		prob := float64(count) / length
+		entropy -= prob * math.Log2(prob)
+	}
+	return entropy
+}
+

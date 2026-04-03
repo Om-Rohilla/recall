@@ -58,7 +58,7 @@ func (e *Engine) Search(query string, currentCtx appctx.CurrentContext, opts Sea
 	}
 
 	maxFreq, _ := e.store.GetMaxFrequency()
-	fetchLimit := opts.Limit * 5
+	fetchLimit := opts.Limit * 3
 
 	var scored []ScoredResult
 	var vaultErr, kbErr error

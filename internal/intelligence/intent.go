@@ -10,8 +10,9 @@ type Intent struct {
 	Tokens         []string `json:"tokens"`
 	ExpandedTokens []string `json:"expanded_tokens"`
 	Category       string   `json:"category,omitempty"`
-	Action         string   `json:"action,omitempty"`
-	Target         string   `json:"target,omitempty"`
+	Action         string          `json:"action,omitempty"`
+	Target         string          `json:"target,omitempty"`
+	Trigrams       map[string]bool `json:"-"`
 }
 
 func ExtractIntent(query string) Intent {
@@ -26,6 +27,7 @@ func ExtractIntent(query string) Intent {
 	intent.Target = detectTarget(intent.Tokens)
 	intent.Category = detectQueryCategory(intent.Tokens)
 	intent.ExpandedTokens = expandSynonyms(intent.Tokens)
+	intent.Trigrams = trigrams(strings.Join(intent.Tokens, " "))
 
 	return intent
 }

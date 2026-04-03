@@ -67,6 +67,9 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 		return nil
 	}
 
+	sanitizedCmd := SanitizeSecrets(data.RawCommand, cfg)
+	data.RawCommand = sanitizedCmd
+
 	filterResult := Filter(data.RawCommand, cfg)
 	if !filterResult.Allowed {
 		log.Debug("command filtered", "reason", filterResult.Reason, "command", data.RawCommand)

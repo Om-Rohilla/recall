@@ -4,10 +4,14 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
+	"github.com/zalando/go-keyring"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -170,4 +174,79 @@ func ConfirmPassword(prompt string) (string, error) {
 	}
 
 	return pass1, nil
+}
+
+// GetOrGenerateVaultKey retrieves the raw vault key from env or OS keyring.
+// For backwards compatibility, it will migrate vault.key to the keyring.
+func GetOrGenerateVaultKey() ([]byte, error) {
+	keyHex := os.Getenv("RECALL_VAULT_KEY")
+	if keyHex != "" {
+		encKey, err := hex.DecodeString(keyHex)
+		if err == nil && len(encKey) == KeySize {
+			return encKey, nil
+		}
+	}
+
+	const service = "recall"
+	const user = "vault-key"
+
+	keyHex, err := keyring.Get(service, user)
+	if err != nil || keyHex == "" {
+		// Try backward compatibility migration
+		migrated := false
+		if configDir, err := os.UserConfigDir(); err == nil {
+			keyPath := filepath.Join(configDir, "recall", "vault.key")
+			if data, err := os.ReadFile(keyPath); err == nil && len(data) >= KeySize*2 {
+				keyHex = string(data)
+				migrated = true
+				_ = keyring.Set(service, user, keyHex)
+				// Secure wipe old key
+				secureDeletePlain(keyPath)
+			}
+		}
+
+		if !migrated {
+			// Generate new key
+			newKey := make([]byte, KeySize)
+			if _, err := rand.Read(newKey); err != nil {
+				return nil, fmt.Errorf("generating new vault key: %w", err)
+			}
+			keyHex = hex.EncodeToString(newKey)
+			if err := keyring.Set(service, user, keyHex); err != nil {
+				// Fallback to in-memory if keyring fails (e.g., CI/CD without dbus)
+				fmt.Printf("Warning: failed to store vault key in OS keyring: %v\n", err)
+			}
+		}
+	}
+
+	encKey, err := hex.DecodeString(keyHex)
+	if err != nil || len(encKey) != KeySize {
+		return nil, fmt.Errorf("invalid or missing vault key")
+	}
+	return encKey, nil
+}
+
+func secureDeletePlain(path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	size := info.Size()
+	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+		zeros := make([]byte, 4096)
+		for written := int64(0); written < size; {
+			n := size - written
+			if n > int64(len(zeros)) {
+				n = int64(len(zeros))
+			}
+			w, err := f.Write(zeros[:n])
+			if err != nil {
+				break
+			}
+			written += int64(w)
+		}
+		f.Sync()
+		f.Close()
+	}
+	os.Remove(path)
 }
