@@ -286,9 +286,11 @@ func TestEmptyVaultPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore with nested path failed: %v", err)
 	}
-	defer store.Close()
+	if err := store.Close(); err != nil {
+		t.Fatalf("closing store failed: %v", err)
+	}
 
-	if _, err := os.Stat(nestedPath); os.IsNotExist(err) {
-		t.Error("expected vault.db to exist at nested path")
+	if _, err := os.Stat(nestedPath + ".enc"); os.IsNotExist(err) {
+		t.Error("expected vault.db.enc to exist at nested path after closing with default encryption")
 	}
 }

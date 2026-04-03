@@ -37,11 +37,31 @@ func NewStore(dbPath string) (*Store, error) {
 	var encKey []byte
 	var workingPath string
 
-	if keyHex := os.Getenv("RECALL_VAULT_KEY"); keyHex != "" {
+	keyHex := os.Getenv("RECALL_VAULT_KEY")
+	if keyHex == "" {
+		if configDir, err := os.UserConfigDir(); err == nil {
+			keyPath := filepath.Join(configDir, "recall", "vault.key")
+			if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+				if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err == nil {
+					newKey := make([]byte, KeySize)
+					if _, err := rand.Read(newKey); err == nil {
+						keyHex = hex.EncodeToString(newKey)
+						_ = os.WriteFile(keyPath, []byte(keyHex), 0o600)
+					}
+				}
+			} else {
+				if data, err := os.ReadFile(keyPath); err == nil {
+					keyHex = string(data)
+				}
+			}
+		}
+	}
+
+	if keyHex != "" {
 		var err error
 		encKey, err = hex.DecodeString(keyHex)
 		if err != nil || len(encKey) != KeySize {
-			return nil, fmt.Errorf("RECALL_VAULT_KEY must be a %d-byte hex string (%d hex chars)", KeySize, KeySize*2)
+			return nil, fmt.Errorf("RECALL_VAULT_KEY (or generated key) must be a %d-byte hex string (%d hex chars)", KeySize, KeySize*2)
 		}
 
 		if _, err := os.Stat(encPath); err == nil {
@@ -209,7 +229,7 @@ func (s *Store) InsertCommand(cmd *Command) (int64, error) {
 		`INSERT INTO commands (raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(raw) DO UPDATE SET
-		   frequency = frequency + 1,
+		   frequency = MIN(frequency + 1, 10000),
 		   last_seen = excluded.last_seen,
 		   last_exit = excluded.last_exit,
 		   avg_duration = excluded.avg_duration`,
@@ -375,7 +395,7 @@ func (s *Store) BatchInsertCommands(cmds []Command) (int, error) {
 	stmt, err := tx.Prepare(
 		`INSERT INTO commands (raw, binary_name, subcommand, flags, category, frequency, first_seen, last_seen, last_exit, avg_duration)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(raw) DO UPDATE SET frequency = frequency + 1, last_seen = excluded.last_seen`,
+		 ON CONFLICT(raw) DO UPDATE SET frequency = MIN(frequency + 1, 10000), last_seen = excluded.last_seen`,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("preparing batch insert: %w", err)

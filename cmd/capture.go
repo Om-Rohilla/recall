@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -36,6 +38,13 @@ func init() {
 
 func runCapture(cmd *cobra.Command, args []string) error {
 	if captureCommand == "" {
+		return nil
+	}
+
+	if os.Getenv("RECALL_DAEMONIZED") == "" {
+		os.Setenv("RECALL_DAEMONIZED", "1")
+		daemonCmd := exec.Command(os.Args[0], os.Args[1:]...)
+		_ = daemonCmd.Start()
 		return nil
 	}
 
