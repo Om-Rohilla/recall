@@ -18,6 +18,8 @@ require (
 )
 
 require (
+	github.com/awnumar/memcall v0.4.0 // indirect
+	github.com/awnumar/memguard v0.23.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect

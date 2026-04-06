@@ -67,10 +67,18 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 		return nil
 	}
 
-	sanitizedCmd := SanitizeSecrets(data.RawCommand, cfg)
-	data.RawCommand = sanitizedCmd
+	// Phase 2: Secure Memory Enclave — hold the raw command in locked,
+	// non-pageable memory while the secret scrubber operates on it.
+	var filterResult FilterResult
+	if err := WithSecureString(data.RawCommand, func(plain string) error {
+		data.RawCommand = SanitizeSecrets(plain, cfg)
+		return nil
+	}); err != nil {
+		log.Warn("secure enclave failed, falling back to direct sanitize", "error", err)
+		data.RawCommand = SanitizeSecrets(data.RawCommand, cfg)
+	}
 
-	filterResult := Filter(data.RawCommand, cfg)
+	filterResult = Filter(data.RawCommand, cfg)
 	if !filterResult.Allowed {
 		log.Debug("command filtered", "reason", filterResult.Reason, "command", data.RawCommand)
 		return nil
