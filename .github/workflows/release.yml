@@ -5,8 +5,12 @@ on:
     tags:
       - "v*"
 
+# Required for Sigstore keyless (OIDC) signing — id-token:write and
+# attestations:write allow cosign to obtain an OIDC token from GitHub Actions.
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -25,6 +29,14 @@ jobs:
           go-version: "1.25.x"
           cache: true
 
+      # Install libsqlite3-dev and gcc for CGO / go-sqlcipher build.
+      - name: Install CGO build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libsqlite3-dev
+
+      # Install cosign for keyless binary signing via Sigstore.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -32,3 +44,5 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          # cosign keyless signing uses OIDC — no private key required.
+          COSIGN_EXPERIMENTAL: "1"
