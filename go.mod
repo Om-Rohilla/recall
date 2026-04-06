@@ -45,4 +45,5 @@ require (
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
+	mvdan.cc/sh/v3 v3.13.0 // indirect
 )

@@ -30,6 +30,14 @@ func Filter(raw string, cfg *config.Config) FilterResult {
 		return FilterResult{Allowed: false, Reason: "noise command"}
 	}
 
+	// Phase 3: AST-based malicious injection guard.
+	// Reject commands containing obfuscated subshells, process substitutions,
+	// or dynamic evaluators (eval/source) that could poison the vault.
+	astResult := CheckCommandAST(raw)
+	if astResult.Trust == TrustLow {
+		return FilterResult{Allowed: false, Reason: "low-trust command (AST): " + astResult.Reason}
+	}
+
 	return FilterResult{Allowed: true}
 }
 
