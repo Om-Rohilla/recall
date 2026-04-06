@@ -11,7 +11,10 @@ builds:
   - main: .
     binary: recall
     env:
-      - CGO_ENABLED=0
+      # CGO_ENABLED=1 is required for go-sqlcipher (SQLCipher / AES-256 encryption).
+      # Binary integrity is ensured via cosign signing and SLSA provenance
+      # rather than pure static linking.
+      - CGO_ENABLED=1
     goos:
       - linux
       - darwin
@@ -38,6 +41,20 @@ archives:
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+
+# cosign signs each archive and the checksums file using Sigstore keyless signing.
+# Users can verify: cosign verify-blob --bundle <file>.bundle <file>
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+    artifacts: checksum
+    output: true
 
 snapshot:
   name_template: "{{ incpatch .Version }}-snapshot"
