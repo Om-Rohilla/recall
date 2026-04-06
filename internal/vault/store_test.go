@@ -157,6 +157,11 @@ func TestSearchFTS5_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("searching: %v", err)
 	}
+
+	if !hasFTSTable(store.db, "commands_fts") {
+		t.Skip("FTS5 missing, skipping remaining FTS test logic")
+	}
+
 	if len(results) < 2 {
 		t.Errorf("expected at least 2 git results, got %d", len(results))
 	}
@@ -328,6 +333,11 @@ func TestRebuildFTSIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("searching after rebuild: %v", err)
 	}
+
+	if !hasFTSTable(store.db, "commands_fts") {
+		t.Skip("FTS5 missing, skipping assertion")
+	}
+
 	if len(results) == 0 {
 		t.Error("expected results after FTS rebuild")
 	}

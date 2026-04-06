@@ -193,20 +193,20 @@ func initSchema(db *sql.DB) error {
 		return fmt.Errorf("creating schema: %w", err)
 	}
 
-	if _, err := db.Exec(createFTS); err != nil {
-		return fmt.Errorf("creating FTS5 index: %w", err)
+	// FTS5 virtual tables require the fts5 extension compiled into SQLite.
+	// On some builds (e.g. certain go-sqlcipher static builds without fts5)
+	// this is unavailable. We degrade gracefully: all non-FTS operations
+	// (insert, update, search-by-LIKE) continue to work normally.
+	// FTS-based searches simply return empty results when tables are absent.
+	//
+	// IMPORTANT: Only create FTS triggers when the FTS table was created.
+	// Dangling triggers referencing a non-existent commands_fts table will
+	// cause DELETE operations to fail with "no such table: commands_fts".
+	if _, err := db.Exec(createFTS); err == nil {
+		_, _ = db.Exec(createFTSTriggers)
 	}
-
-	if _, err := db.Exec(createFTSTriggers); err != nil {
-		return fmt.Errorf("creating FTS5 triggers: %w", err)
-	}
-
-	if _, err := db.Exec(createKnowledgeFTS); err != nil {
-		return fmt.Errorf("creating knowledge FTS5: %w", err)
-	}
-
-	if _, err := db.Exec(createKnowledgeFTSTriggers); err != nil {
-		return fmt.Errorf("creating knowledge FTS5 triggers: %w", err)
+	if _, err := db.Exec(createKnowledgeFTS); err == nil {
+		_, _ = db.Exec(createKnowledgeFTSTriggers)
 	}
 
 	var count int

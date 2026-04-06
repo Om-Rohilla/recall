@@ -186,6 +186,10 @@ func (s *Store) SearchFTS5(query string, limit int) ([]SearchResult, error) {
 		return nil, nil
 	}
 
+	if !hasFTSTable(s.db, "commands_fts") {
+		return nil, nil // Degrade gracefully
+	}
+
 	rows, err := s.db.Query(
 		`SELECT c.id, c.raw, c.binary_name, c.subcommand, c.flags, c.category,
 		        c.frequency, c.first_seen, c.last_seen, c.last_exit, c.avg_duration,
@@ -350,6 +354,10 @@ func (s *Store) SearchKnowledgeFTS5(query string, limit int) ([]Knowledge, error
 	ftsQuery := sanitizeFTSQuery(query)
 	if ftsQuery == "" {
 		return nil, nil
+	}
+
+	if !hasFTSTable(s.db, "knowledge_fts") {
+		return nil, nil // Degrade gracefully
 	}
 
 	rows, err := s.db.Query(
