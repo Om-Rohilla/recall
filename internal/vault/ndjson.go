@@ -86,6 +86,7 @@ func (s *Store) ImportNDJSON(r io.Reader) (int, int, error) {
 				tx.Rollback()
 				return err
 			}
+			defer stmt.Close()
 
 			count := 0
 			for _, ctx := range ctxs {
@@ -98,7 +99,6 @@ func (s *Store) ImportNDJSON(r io.Reader) (int, int, error) {
 					count++
 				}
 			}
-			stmt.Close()
 			if err := tx.Commit(); err != nil {
 				return err
 			}
