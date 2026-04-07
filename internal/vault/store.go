@@ -282,6 +282,10 @@ func (s *Store) GetStats() (*VaultStats, error) {
 }
 
 func (s *Store) BatchInsertCommands(cmds []Command) (int, error) {
+	if len(cmds) == 0 {
+		return 0, nil
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("beginning transaction: %w", err)
@@ -389,6 +393,10 @@ func (s *Store) InsertKnowledge(k *Knowledge) (int64, error) {
 }
 
 func (s *Store) BatchInsertKnowledge(entries []Knowledge) (int, error) {
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("beginning transaction: %w", err)
