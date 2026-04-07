@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 )
 
 // ExportNDJSON streams all commands and contexts to the provided writer in NDJSON format.
@@ -90,7 +91,7 @@ func (s *Store) ImportNDJSON(r io.Reader) (int, int, error) {
 
 			count := 0
 			for _, ctx := range ctxs {
-				tsStr := ctx.Timestamp.UTC().Format("2006-01-02T15:04:05Z")
+				tsStr := ctx.Timestamp.UTC().Format(time.RFC3339)
 				_, err := stmt.Exec(
 					ctx.CommandID, ctx.Cwd, ctx.GitRepo, ctx.GitBranch,
 					ctx.ProjectType, tsStr, ctx.ExitCode, ctx.DurationMs, ctx.SessionID,
