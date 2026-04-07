@@ -263,23 +263,7 @@ func (s *Store) GetRecentCommands(limit int) ([]Command, error) {
 	}
 	defer rows.Close()
 
-	var cmds []Command
-	for rows.Next() {
-		var cmd Command
-		var firstSeen, lastSeen string
-		err := rows.Scan(
-			&cmd.ID, &cmd.Raw, &cmd.Binary, &cmd.Subcommand, &cmd.Flags,
-			&cmd.Category, &cmd.Frequency, &firstSeen, &lastSeen,
-			&cmd.LastExit, &cmd.AvgDuration,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scanning command: %w", err)
-		}
-		cmd.FirstSeen, _ = time.Parse(time.RFC3339, firstSeen)
-		cmd.LastSeen, _ = time.Parse(time.RFC3339, lastSeen)
-		cmds = append(cmds, cmd)
-	}
-	return cmds, rows.Err()
+	return scanCommands(rows)
 }
 
 func (s *Store) GetStats() (*VaultStats, error) {
