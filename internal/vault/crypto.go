@@ -201,7 +201,7 @@ func GetOrGenerateVaultKey() ([]byte, error) {
 				migrated = true
 				_ = keyring.Set(service, user, keyHex)
 				// Secure wipe old key
-				secureDeletePlain(keyPath)
+				secureDelete(keyPath)
 			}
 		}
 
@@ -226,27 +226,4 @@ func GetOrGenerateVaultKey() ([]byte, error) {
 	return encKey, nil
 }
 
-func secureDeletePlain(path string) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-	size := info.Size()
-	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
-		zeros := make([]byte, 4096)
-		for written := int64(0); written < size; {
-			n := size - written
-			if n > int64(len(zeros)) {
-				n = int64(len(zeros))
-			}
-			w, err := f.Write(zeros[:n])
-			if err != nil {
-				break
-			}
-			written += int64(w)
-		}
-		f.Sync()
-		f.Close()
-	}
-	os.Remove(path)
-}
+
