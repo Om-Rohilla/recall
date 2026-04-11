@@ -3,13 +3,14 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/Om-Rohilla/recall/internal/capture"
 	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/spf13/cobra"
 )
+
+var ingestFile string
 
 var ingestCmd = &cobra.Command{
 	Use:    "ingest",
@@ -19,6 +20,7 @@ var ingestCmd = &cobra.Command{
 }
 
 func init() {
+	ingestCmd.Flags().StringVar(&ingestFile, "file", "", "specific queue file to ingest (internal use)")
 	rootCmd.AddCommand(ingestCmd)
 }
 
@@ -28,13 +30,8 @@ func runIngest(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	queueFile := filepath.Join(filepath.Dir(cfg.Vault.Path), "pending.ndjson")
-	if _, err := os.Stat(queueFile); os.IsNotExist(err) {
-		return nil
-	}
-
-	// This is running completely detached from the user's terminal prompt via exec.Command
-	err := capture.IngestQueue(queueFile, cfg)
+	// IngestQueue accepts "" to use the default pending.ndjson path (backward compat).
+	err := capture.IngestQueue(ingestFile, cfg)
 	if err != nil {
 		return fmt.Errorf("ingestion failed: %w", err)
 	}

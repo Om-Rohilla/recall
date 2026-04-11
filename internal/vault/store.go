@@ -187,7 +187,8 @@ func (s *Store) SearchFTS5(query string, limit int) ([]SearchResult, error) {
 	}
 
 	if !hasFTSTable(s.db, "commands_fts") {
-		return nil, nil // Degrade gracefully
+		logging.Get().Warn("FTS5 index unavailable — search degraded. Run: recall maintenance rebuild-index")
+		return nil, nil
 	}
 
 	rows, err := s.db.Query(
@@ -345,7 +346,8 @@ func (s *Store) SearchKnowledgeFTS5(query string, limit int) ([]Knowledge, error
 	}
 
 	if !hasFTSTable(s.db, "knowledge_fts") {
-		return nil, nil // Degrade gracefully
+		logging.Get().Warn("FTS5 knowledge index unavailable — search degraded. Run: recall maintenance rebuild-index")
+		return nil, nil
 	}
 
 	rows, err := s.db.Query(
@@ -413,13 +415,21 @@ func (s *Store) BatchInsertKnowledge(entries []Knowledge) (int, error) {
 	defer stmt.Close()
 
 	inserted := 0
+	var errs []error
 	for _, k := range entries {
 		_, err := stmt.Exec(k.Command, k.Description, k.Intents, k.Category,
 			k.FlagsDoc, k.Examples, k.DangerLevel)
 		if err != nil {
+			errs = append(errs, fmt.Errorf("inserting %q: %w", k.Command, err))
 			continue
 		}
 		inserted++
+	}
+
+	if len(errs) > 0 {
+		logging.Get().Warn("batch knowledge insert had partial failures",
+			"total", len(entries), "inserted", inserted, "failed", len(errs),
+			"first_error", errs[0])
 	}
 
 	if err := tx.Commit(); err != nil {

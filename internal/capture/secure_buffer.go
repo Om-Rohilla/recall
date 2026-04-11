@@ -1,6 +1,8 @@
 package capture
 
 import (
+	"fmt"
+
 	"github.com/awnumar/memguard"
 )
 
@@ -30,12 +32,17 @@ func (s *SecureBuffer) Open() (*memguard.LockedBuffer, error) {
 	return s.enclave.Open()
 }
 
-// Destroy zeroes and frees the locked memory region.
-// This is safe to call multiple times.
+// Destroy zeroes and frees the locked memory region immediately.
+// This is deterministic — it does not rely on GC finalizers.
+// Safe to call multiple times.
 func (s *SecureBuffer) Destroy() {
 	if s.enclave != nil {
-		// Enclaves do not have a direct Destroy method; we nil out the reference
-		// so GC can reclaim it. The underlying LockedBuffer wipes on GC finalize.
+		// Open the enclave to get the LockedBuffer and destroy it immediately,
+		// zeroing the memory page now rather than waiting for GC finalization.
+		lb, err := s.enclave.Open()
+		if err == nil && lb != nil {
+			lb.Destroy() // zeroes and unlocks the page immediately
+		}
 		s.enclave = nil
 	}
 }
@@ -43,16 +50,17 @@ func (s *SecureBuffer) Destroy() {
 // WithSecureString is a convenience helper that allocates a SecureBuffer,
 // calls fn with the plaintext string, then immediately destroys the buffer.
 // This ensures the secret lives in locked memory only for the duration of fn.
+// Returns an error if memory protection cannot be established.
 func WithSecureString(raw string, fn func(plain string) error) error {
 	buf := NewSecureBuffer(raw)
 	defer buf.Destroy()
 
 	lb, err := buf.Open()
 	if err != nil {
-		return err
+		return fmt.Errorf("secure enclave unavailable: memory protection failed: %w", err)
 	}
 	if lb == nil {
-		return fn(raw) // Fallback: enclave already gone, use raw
+		return fmt.Errorf("secure enclave unavailable: memory protection failed")
 	}
 	defer lb.Destroy()
 

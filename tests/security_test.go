@@ -782,6 +782,19 @@ func TestSecretFilteringEnhanced(t *testing.T) {
 		{"connection string", "psql://admin:secret@localhost/db", false},
 		{"safe command", "git commit -m 'fix typo'", true},
 		{"safe docker", "docker compose up -d", true},
+		// --- 2D: New patterns ---
+		{"fly.io fo1_ token", "flyctl auth token fo1_abcdef1234567890", false},
+		{"fly.io fo2_ token", "export FLY_API_TOKEN=fo2_abcdef1234567890", false},
+		{"sentry dsn eq", "export sentry_dsn=https://key@sentry.io/123", false},
+		{"sentry dsn dot", "sentry.dsn=https://key@sentry.io/123 myapp", false},
+		{"vercel token", "vercel_token=abc123secret deploy", false},
+		{"1password op uri", "op read op://vault/item/field", false},
+		{"doppler ct token", "export DOPPLER_TOKEN=dp.ct.abc123def456", false},
+		{"doppler pt token", "export DOPPLER_TOKEN=dp.pt.abc123def456", false},
+		{"doppler st token", "export DOPPLER_TOKEN=dp.st.abc123def456", false},
+		{"hashicorp vault hvs", "vault token lookup hvs.abc123def456ghi789", false},
+		{"hashicorp vault hvb", "export VAULT_TOKEN=hvb.abc123def456ghi789", false},
+		{"hashicorp vault hvr", "export VAULT_TOKEN=hvr.abc123def456ghi789", false},
 	}
 
 	for _, tt := range tests {

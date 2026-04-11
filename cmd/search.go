@@ -109,6 +109,7 @@ func executeSearch(args []string) error {
 
 	if len(results) == 0 {
 		fmt.Println(ui.RenderNoResults(query))
+		fmt.Println(ui.HintStyle.Render("  ℹ  If this seems wrong, the search index may be degraded. Run: recall maintenance rebuild-index"))
 		return nil
 	}
 

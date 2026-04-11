@@ -44,7 +44,9 @@ func (s *Store) ExportNDJSON(w io.Writer, commandsOnly bool) error {
 // ImportNDJSON reads an NDJSON stream and imports commands and contexts into the store.
 // Returns the number of commands and contexts imported.
 func (s *Store) ImportNDJSON(r io.Reader) (int, int, error) {
-	scanner := bufio.NewScanner(r)
+	const maxImportBytes = 512 * 1024 * 1024 // 512 MB safety guard against OOM
+	limited := io.LimitReader(r, maxImportBytes)
+	scanner := bufio.NewScanner(limited)
 	// Buffer size for large lines (e.g., commands with huge flags)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)

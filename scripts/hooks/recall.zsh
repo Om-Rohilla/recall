@@ -32,6 +32,8 @@ __recall_precmd() {
 
 if [ -z "$RECALL_SESSION_ID" ]; then
     export RECALL_SESSION_ID="sess_$(date +%s)_$$"
+
+    
 fi
 
 autoload -Uz add-zsh-hook

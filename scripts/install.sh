@@ -86,19 +86,36 @@ install_binary() {
         info "Verifying checksum..."
         EXPECTED="$(grep "${ARCHIVE_NAME}" "${TMPDIR}/checksums.txt" | awk '{print $1}')"
         if [ -n "$EXPECTED" ]; then
-            if command -v sha256sum >/dev/null 2>&1; then
+            # Allow explicit opt-out (INSECURE) for environments where tools are unavailable
+            if [ "${RECALL_SKIP_VERIFY:-0}" = "1" ]; then
+                info "⚠️  RECALL_SKIP_VERIFY=1: skipping integrity check (INSECURE)"
+                ACTUAL="$EXPECTED"
+            elif command -v sha256sum >/dev/null 2>&1; then
                 ACTUAL="$(sha256sum "${TMPDIR}/${ARCHIVE_NAME}" | awk '{print $1}')"
             elif command -v shasum >/dev/null 2>&1; then
                 ACTUAL="$(shasum -a 256 "${TMPDIR}/${ARCHIVE_NAME}" | awk '{print $1}')"
             else
-                info "No sha256sum or shasum found — skipping checksum verification"
-                ACTUAL="$EXPECTED"
+                die "sha256sum and shasum not found. Cannot verify binary integrity.
+Install coreutils (Linux) or use a macOS system with shasum available.
+To skip verification explicitly (INSECURE), set RECALL_SKIP_VERIFY=1."
             fi
 
             if [ "$ACTUAL" != "$EXPECTED" ]; then
                 die "Checksum mismatch!\n  expected: ${EXPECTED}\n  got:      ${ACTUAL}"
             fi
             ok "Checksum verified"
+
+            # Optional cosign verification if cosign is available
+            BUNDLE_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt.bundle"
+            if command -v cosign >/dev/null 2>&1; then
+                if curl -sSfL -o "${TMPDIR}/checksums.txt.bundle" "$BUNDLE_URL" 2>/dev/null; then
+                    cosign verify-blob \
+                        --bundle "${TMPDIR}/checksums.txt.bundle" \
+                        "${TMPDIR}/checksums.txt" \
+                        || die "cosign signature verification failed — aborting install"
+                    ok "cosign signature verified"
+                fi
+            fi
         fi
     else
         info "Checksums not available — skipping verification"

@@ -79,6 +79,18 @@ var builtinSecretPatterns = []string{
 	"twilio_auth_token",
 	// JWT pattern (header.payload.signature)
 	"eyj",
+	// Fly.io tokens
+	"fo1_", "fo2_",
+	// Sentry DSN (contains org slug — still sensitive)
+	"sentry_dsn=", "sentry.dsn=",
+	// Vercel (belt+suspenders alongside regex)
+	"vercel_token=",
+	// 1Password CLI output patterns
+	"op://",
+	// Doppler service/personal/staging tokens
+	"dp.ct.", "dp.pt.", "dp.st.",
+	// HashiCorp Vault tokens
+	"hvs.", "hvb.", "hvr.",
 }
 
 // builtinSecretRegexes catch patterns that require regex matching.

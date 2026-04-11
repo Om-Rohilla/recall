@@ -10,11 +10,12 @@ import (
 )
 
 type Config struct {
-	Vault   VaultConfig   `toml:"vault"`
-	Capture CaptureConfig `toml:"capture"`
-	Search  SearchConfig  `toml:"search"`
-	UI      UIConfig      `toml:"ui"`
-	Alias   AliasConfig   `toml:"alias"`
+	Vault    VaultConfig    `toml:"vault"`
+	Capture  CaptureConfig  `toml:"capture"`
+	Search   SearchConfig   `toml:"search"`
+	UI       UIConfig       `toml:"ui"`
+	Alias    AliasConfig    `toml:"alias"`
+	Hotkeys  HotkeysConfig  `toml:"hotkeys"`
 }
 
 type VaultConfig struct {
@@ -41,6 +42,19 @@ type UIConfig struct {
 
 type AliasConfig struct {
 	MinFrequency int `toml:"min_frequency"`
+}
+
+// HotkeysConfig holds configurable shell hotkey bindings.
+// Changing these avoids conflicts with readline default key sequences.
+type HotkeysConfig struct {
+	// Search triggers the inline vault search (default: ctrl+space).
+	Search string `toml:"search"`
+	// Explain triggers `recall explain` for the current command line (default: alt+r).
+	// The old default ctrl+e conflicts with readline end-of-line.
+	Explain string `toml:"explain"`
+	// Vault opens the interactive vault browser (default: alt+k).
+	// The old default ctrl+k conflicts with readline kill-line.
+	Vault string `toml:"vault"`
 }
 
 var (

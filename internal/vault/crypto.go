@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/zalando/go-keyring"
 	"golang.org/x/crypto/argon2"
@@ -197,10 +198,21 @@ func GetOrGenerateVaultKey() ([]byte, error) {
 		if configDir, err := os.UserConfigDir(); err == nil {
 			keyPath := filepath.Join(configDir, "recall", "vault.key")
 			if data, err := os.ReadFile(keyPath); err == nil && len(data) >= KeySize*2 {
-				keyHex = string(data)
+				keyHex = strings.TrimSpace(string(data))
 				migrated = true
-				_ = keyring.Set(service, user, keyHex)
-				// Secure wipe old key
+				// Only delete the old key file AFTER a confirmed keyring write.
+				// If keyring.Set fails the file remains as the active key source.
+				if err2 := keyring.Set(service, user, keyHex); err2 != nil {
+					fmt.Fprintf(os.Stderr,
+						"⚠️  OS keyring unavailable (%v). Using file-based key fallback.\n", err2)
+					// Return the key loaded from file without deleting it.
+					encKey, decErr := hex.DecodeString(keyHex)
+					if decErr != nil || len(encKey) != KeySize {
+						return nil, fmt.Errorf("invalid vault key in file: %w", decErr)
+					}
+					return encKey, nil
+				}
+				// Keyring write confirmed — safe to remove the plaintext file.
 				secureDelete(keyPath)
 			}
 		}
@@ -213,13 +225,24 @@ func GetOrGenerateVaultKey() ([]byte, error) {
 			}
 			keyHex = hex.EncodeToString(newKey)
 			if err := keyring.Set(service, user, keyHex); err != nil {
-				// Fallback to in-memory if keyring fails (e.g., CI/CD without dbus)
-				fmt.Printf("Warning: failed to store vault key in OS keyring: %v\n", err)
+				// Keyring unavailable — persist to a file so the key survives
+				// across process restarts instead of being ephemeral in-memory.
+				configDir, dirErr := os.UserConfigDir()
+				if dirErr != nil {
+					return nil, fmt.Errorf("keyring unavailable and cannot find config dir: %w", dirErr)
+				}
+				keyPath := filepath.Join(configDir, "recall", "vault.key")
+				fmt.Fprintf(os.Stderr,
+					"⚠️  OS keyring unavailable (%v).\n    Falling back to file-based key at %s\n",
+					err, keyPath)
+				if mkErr := os.MkdirAll(filepath.Dir(keyPath), 0o700); mkErr == nil {
+					_ = os.WriteFile(keyPath, []byte(keyHex), 0o600)
+				}
 			}
 		}
 	}
 
-	encKey, err := hex.DecodeString(keyHex)
+	encKey, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil || len(encKey) != KeySize {
 		return nil, fmt.Errorf("invalid or missing vault key")
 	}

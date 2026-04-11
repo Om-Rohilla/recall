@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Om-Rohilla/recall/pkg/logging"
 	"github.com/tetratelabs/wazero"
@@ -81,10 +82,12 @@ func (r *Registry) List() ([]Plugin, error) {
 
 // queryPlugin asks the WASM module for its metadata via the '--recall-plugin-info' flag.
 // Uses `wazero` to securely sandbox the plugin. It has ZERO system access except stdout.
+// A 10-second timeout prevents a malicious or looping plugin from hanging the process.
 func (r *Registry) queryPlugin(path string, fallbackName string) Plugin {
 	p := Plugin{Name: fallbackName, Path: path, Version: "unknown", Hooks: []string{}}
-	
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	wasmBytes, err := os.ReadFile(path)
 	if err != nil {
 		logging.Get().Debug("failed to read wasm plugin", "path", path, "error", err)

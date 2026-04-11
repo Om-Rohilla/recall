@@ -65,5 +65,10 @@ func DefaultConfig() *Config {
 		Alias: AliasConfig{
 			MinFrequency: 5,
 		},
+		Hotkeys: HotkeysConfig{
+			Search:  "ctrl+space", // Ctrl+Space — inline search
+			Explain: "alt+r",      // Alt+R — explain (was ctrl+e, which moves cursor to EOL in readline)
+			Vault:   "alt+k",      // Alt+K — vault browser (was ctrl+k, which kills to EOL in readline)
+		},
 	}
 }

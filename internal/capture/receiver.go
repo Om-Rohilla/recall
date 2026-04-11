@@ -74,11 +74,14 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 		data.RawCommand = SanitizeSecrets(plain, cfg)
 		return nil
 	}); err != nil {
-		log.Warn("secure enclave failed, falling back to direct sanitize", "error", err)
+		// Enclave unavailable (memguard init failure). Log it explicitly and
+		// continue — sanitization must still run even without memory protection.
+		log.Warn("secure enclave failed — processing without memory lock", "error", err)
 		data.RawCommand = SanitizeSecrets(data.RawCommand, cfg)
 	}
 
 	filterResult = Filter(data.RawCommand, cfg)
+
 	if !filterResult.Allowed {
 		log.Debug("command filtered", "reason", filterResult.Reason, "command", data.RawCommand)
 		return nil

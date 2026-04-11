@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Om-Rohilla/recall/internal/capture"
 	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/internal/vault"
 	"github.com/Om-Rohilla/recall/pkg/config"
@@ -50,6 +51,10 @@ func runShare(cmd *cobra.Command, args []string) error {
 		actualCmd = results[0].Command.Raw
 		footer = fmt.Sprintf("Used %d times  •  Powered by Recall", results[0].Command.Frequency)
 	}
+
+	// Scrub secrets from the command string before it ends up in the SVG.
+	// This prevents tokens like AWS_SECRET_KEY=abc123 from appearing in shared cards.
+	actualCmd = capture.SanitizeSecrets(actualCmd, cfg)
 
 	svg := generateSVG(title, actualCmd, footer)
 	
