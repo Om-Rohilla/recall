@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/Om-Rohilla/recall/pkg/config"
 	"github.com/Om-Rohilla/recall/pkg/shell"
 	"github.com/spf13/cobra"
 )
@@ -30,7 +31,16 @@ func runHook(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	script, err := shell.HookScript(info.Shell)
+	// Load user config so custom hotkeys override the defaults.
+	cfg := config.Get()
+	keys := shell.HotkeySeqsFromConfig(
+		info.Shell,
+		cfg.Hotkeys.Search,
+		cfg.Hotkeys.Explain,
+		cfg.Hotkeys.Vault,
+	)
+
+	script, err := shell.HookScriptWithKeys(info.Shell, keys)
 	if err != nil {
 		return err
 	}

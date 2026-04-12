@@ -537,14 +537,17 @@ func TestFishHookHasHotkeyBindings(t *testing.T) {
 		t.Fatalf("generating fish hook: %v", err)
 	}
 
+	// Ctrl+Space — inline search (unchanged)
 	if !strings.Contains(script, `bind \c@`) {
 		t.Error("fish hook missing Ctrl+Space binding")
 	}
-	if !strings.Contains(script, `bind \ck`) {
-		t.Error("fish hook missing Ctrl+K binding")
+	// Alt+K — vault browser (replaced old Ctrl+K which conflicted with readline kill-line)
+	if !strings.Contains(script, `bind \ek`) {
+		t.Error("fish hook missing Alt+K (vault) binding — Ctrl+K was removed due to readline conflict")
 	}
-	if !strings.Contains(script, `bind \ce`) {
-		t.Error("fish hook missing Ctrl+E binding")
+	// Alt+R — explain (replaced old Ctrl+E which conflicted with readline end-of-line)
+	if !strings.Contains(script, `bind \er`) {
+		t.Error("fish hook missing Alt+R (explain) binding — Ctrl+E was removed due to readline conflict")
 	}
 }
 
