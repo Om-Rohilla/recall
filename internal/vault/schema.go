@@ -81,8 +81,9 @@ CREATE INDEX IF NOT EXISTS idx_contexts_command_id ON contexts(command_id);
 CREATE INDEX IF NOT EXISTS idx_contexts_timestamp ON contexts(timestamp);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_command ON knowledge(command);
-CREATE INDEX IF NOT EXISTS idx_knowledge_pack_id ON knowledge(pack_id);
 `
+// idx_knowledge_pack_id is created post-migration because pack_id is only
+// guaranteed to exist after migration v4 runs on legacy databases.
 
 const createFTS = `
 CREATE VIRTUAL TABLE IF NOT EXISTS commands_fts USING fts5(
@@ -177,7 +178,7 @@ var migrations = []migration{
 			installed_at  TEXT NOT NULL
 		);
 		INSERT OR IGNORE INTO knowledge_packs (id, name, version, installed_at) VALUES ('core', 'Core Built-ins', '1.0.0', datetime('now'));
-		ALTER TABLE knowledge ADD COLUMN pack_id TEXT DEFAULT 'core' REFERENCES knowledge_packs(id) ON DELETE CASCADE;
+		ALTER TABLE knowledge ADD COLUMN pack_id TEXT DEFAULT 'core';
 		CREATE INDEX IF NOT EXISTS idx_knowledge_pack_id ON knowledge(pack_id);`,
 	},
 }
@@ -226,6 +227,12 @@ func initSchema(db *sql.DB) error {
 	if err := runMigrations(db); err != nil {
 		return fmt.Errorf("running migrations: %w", err)
 	}
+
+	// Create the pack_id index here (post-migration) so that migration v4 has
+	// already added the column on legacy databases. On fresh databases the
+	// column was part of createSchema; on migrated databases migration v4 already
+	// created this index — IF NOT EXISTS makes this a safe no-op.
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_knowledge_pack_id ON knowledge(pack_id)`)
 
 	return nil
 }

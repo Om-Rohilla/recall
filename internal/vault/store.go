@@ -42,14 +42,21 @@ func NewStore(dbPath string) (*Store, error) {
 	// any Go-level SQL runs. This is the only approach that works for both
 	// creating AND reopening encrypted SQLCipher files.
 	//
-	// Format: x'hexvalue' passes the raw 32-byte key directly to SQLCipher
-	// without KDF, which is correct since GetOrGenerateVaultKey() already
-	// returns a cryptographically strong random key.
+	// LEGACY COMPATIBILITY: If the vault already exists as a plain (unencrypted)
+	// SQLite file, detect it via the file header and open WITHOUT a key.
+	// Older recall versions used a Go-level "PRAGMA key" that was silently
+	// ignored on existing files, leaving vaults unencrypted. Forcing an
+	// encrypted open would corrupt reads ("file is not a database").
 	dsn := dbPath
 	if keyHex != "" {
-		// Percent-encode any '?' in the path to avoid breaking URI query parsing.
-		safePath := strings.ReplaceAll(dbPath, "?", "%3F")
-		dsn = fmt.Sprintf("file:%s?_pragma_key=x'%s'", safePath, keyHex)
+		if isPlainSQLite(dbPath) {
+			log.Warn("vault is unencrypted (legacy format). Run 'recall maintenance encrypt-vault' to migrate.")
+		} else {
+			// New vault or already-encrypted SQLCipher vault: apply key via DSN.
+			// Percent-encode any '?' in the path to avoid breaking URI query parsing.
+			safePath := strings.ReplaceAll(dbPath, "?", "%3F")
+			dsn = fmt.Sprintf("file:%s?_pragma_key=%s", safePath, keyHex)
+		}
 	}
 
 	db, err := sql.Open("sqlite3", dsn)
@@ -81,6 +88,25 @@ func randomHex(n int) string {
 		panic("crypto/rand unavailable: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// isPlainSQLite returns true if the file at path exists and begins with the
+// standard SQLite 3 file header ("SQLite format 3\x00"). This distinguishes
+// legacy unencrypted vaults from SQLCipher-encrypted databases (which have a
+// random 16-byte salt as the first page header).
+func isPlainSQLite(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false // file doesn't exist → not a plain SQLite file
+	}
+	defer f.Close()
+	const header = "SQLite format 3\x00"
+	buf := make([]byte, len(header))
+	n, err := f.Read(buf)
+	if err != nil || n < len(header) {
+		return false
+	}
+	return string(buf) == header
 }
 
 func (s *Store) Close() error {
