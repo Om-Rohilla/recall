@@ -290,7 +290,9 @@ func TestEmptyVaultPath(t *testing.T) {
 		t.Fatalf("closing store failed: %v", err)
 	}
 
-	if _, err := os.Stat(nestedPath + ".enc"); os.IsNotExist(err) {
-		t.Error("expected vault.db.enc to exist at nested path after closing with default encryption")
+	// SQLCipher encrypts the vault database IN-PLACE — the vault.db itself is
+	// the encrypted file. There is no separate .enc sidecar file.
+	if _, err := os.Stat(nestedPath); os.IsNotExist(err) {
+		t.Error("expected vault.db to exist at nested path after store creation")
 	}
 }

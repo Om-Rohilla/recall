@@ -639,7 +639,9 @@ func TestEncryptedVaultRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "vault.db")
 
-	// Generate a 32-byte hex key
+	// Pin a deterministic 32-byte vault key for the duration of this test.
+	// Without this, two consecutive NewStore calls generate different keys and
+	// the second open fails with "file is not a database".
 	keyBytes := make([]byte, 32)
 	for i := range keyBytes {
 		keyBytes[i] = byte(i + 1)
@@ -665,14 +667,14 @@ func TestEncryptedVaultRoundtrip(t *testing.T) {
 		t.Fatalf("closing encrypted vault: %v", err)
 	}
 
-	encPath := dbPath + ".enc"
-	if _, err := os.Stat(encPath); os.IsNotExist(err) {
-		t.Fatal("encrypted vault file should exist after close")
+	// SQLCipher encrypts the database IN-PLACE — vault.db is the encrypted file.
+	// There is no .enc sidecar. Verify the db exists and is not plaintext.
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		t.Fatal("encrypted vault.db should exist after close")
 	}
-
-	encData, _ := os.ReadFile(encPath)
-	if strings.Contains(string(encData), "git push") {
-		t.Fatal("encrypted vault file should not contain plaintext commands")
+	rawData, _ := os.ReadFile(dbPath)
+	if strings.Contains(string(rawData), "git push") {
+		t.Fatal("vault.db should not contain plaintext commands — SQLCipher encryption failed")
 	}
 
 	store2, err := vault.NewStore(dbPath)
@@ -744,6 +746,13 @@ func TestFTSQuerySanitizationBlocksWildcard(t *testing.T) {
 func TestSchemaMigration(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "migrate.db")
+
+	// Pin a consistent vault key so both NewStore calls open with the same
+	// SQLCipher key. Without this, GetOrGenerateVaultKey() generates a fresh
+	// random key on each call (keyring unavailable in test env), causing the
+	// second open to fail with "file is not a database".
+	t.Setenv("RECALL_VAULT_KEY",
+		"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
 
 	store, err := vault.NewStore(dbPath)
 	if err != nil {

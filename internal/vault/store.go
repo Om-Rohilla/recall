@@ -37,16 +37,24 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 	keyHex := hex.EncodeToString(encKey)
 
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening vault database: %w", err)
+	// Build the DSN with the _pragma_key parameter so go-sqlcipher sets the
+	// SQLCipher key at the C level (immediately after sqlite3_open_v2), before
+	// any Go-level SQL runs. This is the only approach that works for both
+	// creating AND reopening encrypted SQLCipher files.
+	//
+	// Format: x'hexvalue' passes the raw 32-byte key directly to SQLCipher
+	// without KDF, which is correct since GetOrGenerateVaultKey() already
+	// returns a cryptographically strong random key.
+	dsn := dbPath
+	if keyHex != "" {
+		// Percent-encode any '?' in the path to avoid breaking URI query parsing.
+		safePath := strings.ReplaceAll(dbPath, "?", "%3F")
+		dsn = fmt.Sprintf("file:%s?_pragma_key=x'%s'", safePath, keyHex)
 	}
 
-	if keyHex != "" {
-		if _, err := db.Exec(fmt.Sprintf("PRAGMA key = '%s';", keyHex)); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("setting vault key: %w", err)
-		}
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("opening vault database: %w", err)
 	}
 
 	db.SetMaxOpenConns(1)

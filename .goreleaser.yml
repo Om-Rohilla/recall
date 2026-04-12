@@ -5,7 +5,7 @@ project_name: recall
 before:
   hooks:
     - go mod tidy
-    - go vet ./...
+    - go vet -tags sqlite_fts5 ./...
 
 builds:
   - main: .
@@ -15,6 +15,10 @@ builds:
       # Binary integrity is ensured via cosign signing and SLSA provenance
       # rather than pure static linking.
       - CGO_ENABLED=1
+    # sqlite_fts5 enables FTS5 full-text search virtual tables.
+    # Must match the build tag used in Makefile and CI.
+    tags:
+      - sqlite_fts5
     goos:
       - linux
       - darwin
@@ -71,15 +75,17 @@ changelog:
       - Merge pull request
       - Merge branch
 
-homebrew_casks:
+# Homebrew formula for CLI installation via `brew install Om-Rohilla/tap/recall`.
+# skip_upload: auto — silently skips if the tap repo is unavailable or the
+# token lacks write access, so release does not fail on missing tap.
+brews:
   - repository:
       owner: Om-Rohilla
       name: homebrew-tap
     name: recall
     homepage: "https://github.com/Om-Rohilla/recall"
     description: "100% offline command intelligence for your terminal"
-    binaries:
-      - recall
+    skip_upload: "auto"
 
 release:
   github:
