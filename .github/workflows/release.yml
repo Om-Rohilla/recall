@@ -49,8 +49,9 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --clean
+          args: release --clean -p 1
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           # cosign keyless signing uses OIDC — no private key required.
           COSIGN_EXPERIMENTAL: "1"
+          ZIG_GLOBAL_CACHE_DIR: ${{ runner.temp }}/zig-cache
