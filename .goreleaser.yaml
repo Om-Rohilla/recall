@@ -24,21 +24,6 @@ builds:
     tags:
       - sqlite_fts5
 
-  # Linux ARM64
-  - id: linux-arm64
-    main: .
-    binary: recall
-    env:
-      - CGO_ENABLED=1
-      - CC=aarch64-linux-gnu-gcc
-      - CXX=aarch64-linux-gnu-g++
-    goos:
-      - linux
-    goarch:
-      - arm64
-    tags:
-      - sqlite_fts5
-
   # macOS AMD64
   - id: darwin-amd64
     main: .
@@ -69,21 +54,6 @@ builds:
     tags:
       - sqlite_fts5
 
-  # Windows AMD64
-  - id: windows-amd64
-    main: .
-    binary: recall
-    env:
-      - CGO_ENABLED=1
-      - CC=x86_64-w64-mingw32-gcc
-      - CXX=x86_64-w64-mingw32-g++
-    goos:
-      - windows
-    goarch:
-      - amd64
-    tags:
-      - sqlite_fts5
-
 archives:
   - format: tar.gz
     name_template: >-
@@ -93,9 +63,6 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "arm64" }}arm64
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
 
 checksum:
   name_template: "checksums.txt"
