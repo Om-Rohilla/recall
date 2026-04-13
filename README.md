@@ -136,6 +136,8 @@ That's it. Three commands and you're productive.
 
 For an exhaustive dive into Recall, including ASCII architecture diagrams, the threat model matrix, exact use-case personas (from the *Hasty Dev* to the *SRE*), and the competitive moat comparison, see our **[Recall Deep Dive & Usage Manual](recall_usage.md)**.
 
+For a practical, day-by-day tutorial on how to use Recall as a student learning the terminal or a professional engineer optimizing workflows, read **[The Ultimate User Guide](USER_GUIDE.md)**.
+
 For QA Engineers and production validation, refer to our comprehensive EOL Safety checklists in the [Production QA Cheat Sheet](.gemini/antigravity/brain/6bf202a7-3877-4116-9e68-9991045b9219/recall_qa_cheatsheet.md) (Note: local artifact).
 
 ---
