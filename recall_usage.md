@@ -176,7 +176,7 @@ $ recall "run postgres docker locally"
 
 ```bash
 # During P0: don't think, just search
-$ recall "rollback kubernetes deployment"
+$ recall "rollback kubernetes deployment"t
 ▸ kubectl rollout undo deployment/api --to-revision=3   94%
 ▸ kubectl rollout history deployment/api                91%
 ▸ helm rollback my-app 5 --namespace production         87%
