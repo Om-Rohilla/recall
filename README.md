@@ -7,6 +7,7 @@
     <a href="#features">Features</a> &bull;
     <a href="#all-commands">Commands</a> &bull;
     <a href="#how-it-works">Architecture</a> &bull;
+    <a href="recall_usage.md">Deep Dive & Manual</a> &bull;
     <a href="#contributing">Contributing</a>
   </p>
   <p align="center">
@@ -128,6 +129,14 @@ recall "find and kill process on port 3000"
 ```
 
 That's it. Three commands and you're productive.
+
+---
+
+## Documentation
+
+For an exhaustive dive into Recall, including ASCII architecture diagrams, the threat model matrix, exact use-case personas (from the *Hasty Dev* to the *SRE*), and the competitive moat comparison, see our **[Recall Deep Dive & Usage Manual](recall_usage.md)**.
+
+For QA Engineers and production validation, refer to our comprehensive EOL Safety checklists in the [Production QA Cheat Sheet](.gemini/antigravity/brain/6bf202a7-3877-4116-9e68-9991045b9219/recall_qa_cheatsheet.md) (Note: local artifact).
 
 ---
 
@@ -266,7 +275,7 @@ For the complete reference, run `recall --help` or `recall <command> --help`.
 Recall takes privacy seriously:
 
 1. **Nothing leaves your machine.** Zero network calls. No telemetry. No analytics.
-2. **Vault encryption at rest** — AES-256-GCM via `RECALL_VAULT_KEY`. Exports encrypted with Argon2id key derivation. Vault files are permission-locked (0600).
+2. **Vault encryption at rest** — AES-256-GCM via `RECALL_VAULT_KEY` securely applied at the C-level (via SQLCipher's `_pragma_key` DSN injection). Exports are encrypted with Argon2id key derivation. Features automatic detection and backward compatibility for legacy (unencrypted) vaults.
 3. **Secrets are never stored** — commands containing `password`, `token`, `secret`, `API_KEY`, JWT tokens, Stripe keys, GitHub PATs, and 50+ patterns are filtered automatically. Regex-based detection catches inline env exports and long hex strings.
 4. **FTS5 injection hardened** — all search queries are sanitized to prevent operator injection.
 5. **Crash-safe encryption** — signal handlers securely wipe temp decrypted files on SIGTERM/SIGINT.
