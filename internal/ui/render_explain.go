@@ -34,14 +34,12 @@ func RenderShortExplain(result explain.ExplainResult) string {
 func RenderFullExplain(result explain.ExplainResult, showWarnings bool) string {
 	var lines []string
 
-	titleLabel := "Command Breakdown"
+	titleLabel := TitleStyle.Render("Command Breakdown")
 	switch result.DangerLevel {
 	case explain.Destructive:
 		titleLabel = ErrorStyle.Render("Command Breakdown [DESTRUCTIVE]")
 	case explain.Caution:
 		titleLabel = WarningStyle.Render("Command Breakdown [CAUTION]")
-	default:
-		titleLabel = TitleStyle.Render("Command Breakdown")
 	}
 	lines = append(lines, titleLabel)
 	lines = append(lines, "")
@@ -108,7 +106,7 @@ func RenderFullExplain(result explain.ExplainResult, showWarnings bool) string {
 	}
 
 	content := strings.Join(lines, "\n")
-	return BorderStyle.Render(content)
+	return PanelStyle.Render(content)
 }
 
 func RenderStats(totalCommands, uniqueCommands, captureDays, period int, topCmds []StatsCommand, categories []StatsCategory, rareCmds []StatsCommand, streak *vault.StreakInfo) string {
@@ -231,7 +229,7 @@ func RenderStats(totalCommands, uniqueCommands, captureDays, period int, topCmds
 	}
 
 	content := strings.Join(lines, "\n")
-	return BorderStyle.Render(content)
+	return PanelStyle.Render(content)
 }
 
 // StatsCommand is a simplified command struct for rendering.
@@ -274,7 +272,7 @@ func RenderAliasSuggestions(suggestions []AliasSuggestion) string {
 		lines = append(lines, DimStyle.Render(fmt.Sprintf("    alias %s='%s'", s.Alias, s.Command)))
 	}
 
-	return BorderStyle.Render(strings.Join(lines, "\n"))
+	return PanelStyle.Render(strings.Join(lines, "\n"))
 }
 
 type AliasSuggestion struct {

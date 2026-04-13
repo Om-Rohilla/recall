@@ -9,27 +9,34 @@ import (
 var noColor = os.Getenv("NO_COLOR") != ""
 
 var (
-	ColorPrimary   = lipgloss.Color("#7C3AED") // purple
-	ColorSecondary = lipgloss.Color("#06B6D4") // cyan
-	ColorSuccess   = lipgloss.Color("#10B981") // green
-	ColorWarning   = lipgloss.Color("#F59E0B") // amber
-	ColorDanger    = lipgloss.Color("#EF4444") // red
-	ColorMuted     = lipgloss.Color("#6B7280") // gray
-	ColorText      = lipgloss.Color("#E5E7EB") // light gray
-	ColorBright    = lipgloss.Color("#F9FAFB") // white
-	ColorDim       = lipgloss.Color("#4B5563") // dark gray
-	ColorAccent    = lipgloss.Color("#8B5CF6") // light purple
+	ColorPrimary   = lipgloss.Color("#BD93F9") // Premium Purple
+	ColorSecondary = lipgloss.Color("#8BE9FD") // Cyan Accent
+	ColorSuccess   = lipgloss.Color("#50FA7B") // Neon Green
+	ColorWarning   = lipgloss.Color("#FFB86C") // Amber/Orange
+	ColorDanger    = lipgloss.Color("#FF5555") // Red
+	ColorMuted     = lipgloss.Color("#6272A4") // Muted Blue-Gray
+	ColorText      = lipgloss.Color("#F8F8F2") // Off-White
+	ColorBright    = lipgloss.Color("#FFFFFF") // Pure White
+	ColorDim       = lipgloss.Color("#44475A") // Dark Gray/Selection
+	ColorAccent    = lipgloss.Color("#FF79C6") // Pink Accent
 )
 
 var (
+	PanelStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorDim).
+			Padding(1, 4).
+			Margin(1, 0)
+
 	BorderStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(ColorPrimary).
-			Padding(1, 2)
+			Padding(1, 3)
 
 	TitleStyle = lipgloss.NewStyle().
-			Foreground(ColorPrimary).
-			Bold(true)
+			Foreground(ColorAccent).
+			Bold(true).
+			MarginBottom(1)
 
 	CommandStyle = lipgloss.NewStyle().
 			Foreground(ColorBright).
@@ -78,8 +85,8 @@ var (
 				Padding(0, 2)
 
 	SelectedItemStyle = lipgloss.NewStyle().
-				Foreground(ColorBright).
-				Background(ColorPrimary).
+				Foreground(ColorText).
+				Background(ColorDim).
 				Bold(true)
 
 	NormalItemStyle = lipgloss.NewStyle().
@@ -120,6 +127,7 @@ var (
 func init() {
 	if noColor {
 		plain := lipgloss.NewStyle()
+		PanelStyle = lipgloss.NewStyle().Padding(1, 2).Margin(1, 0)
 		BorderStyle = lipgloss.NewStyle().Padding(1, 2)
 		TitleStyle = plain
 		CommandStyle = plain

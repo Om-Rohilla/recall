@@ -155,8 +155,7 @@ func (m SearchInteractiveModel) View() string {
 
 	var b strings.Builder
 
-	b.WriteString("\n")
-	b.WriteString("  " + TitleStyle.Render("Search Results") + "\n\n")
+	b.WriteString(TitleStyle.Render("Search Results") + "\n\n")
 
 	for i, r := range m.results {
 		isSelected := i == m.cursor
@@ -211,7 +210,7 @@ func (m SearchInteractiveModel) View() string {
 				b.WriteString("       " + MetadataStyle.Render(strings.Join(meta, "  │  ")) + "\n")
 			}
 		} else {
-			b.WriteString("   " + icon + " " + NormalItemStyle.Render(raw) + "  " + confStyled + "\n")
+			b.WriteString(icon + " " + NormalItemStyle.Render(raw) + "  " + confStyled + "\n")
 		}
 	}
 
@@ -222,14 +221,17 @@ func (m SearchInteractiveModel) View() string {
 
 	// Action bar
 	b.WriteString("\n")
-	b.WriteString("  " + HintStyle.Render("[Enter]") + " Execute  ")
-	b.WriteString(HintStyle.Render("[c]") + " Copy  ")
-	b.WriteString(HintStyle.Render("[e]") + " Edit  ")
-	b.WriteString(HintStyle.Render("[x]") + " Explain  ")
-	b.WriteString(HintStyle.Render("[↑/↓]") + " Navigate  ")
-	b.WriteString(HintStyle.Render("[Esc]") + " Quit\n")
+	actionBar := HintStyle.Render("[Enter]") + " Execute  " +
+		HintStyle.Render("[c]") + " Copy  " +
+		HintStyle.Render("[e]") + " Edit  " +
+		HintStyle.Render("[x]") + " Explain  " +
+		HintStyle.Render("[↑/↓]") + " Navigate  " +
+		HintStyle.Render("[Esc]") + " Quit"
 
-	return b.String()
+	b.WriteString(DimStyle.Render(strings.Repeat("─", m.width-8)) + "\n")
+	b.WriteString(actionBar + "\n")
+
+	return PanelStyle.Render(b.String())
 }
 
 // Outcome returns the user's chosen action, or nil if they quit.
