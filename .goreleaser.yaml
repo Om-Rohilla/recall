@@ -21,6 +21,8 @@ builds:
       - linux
     goarch:
       - amd64
+    flags:
+      - -p=1
     tags:
       - sqlite_fts5
 
@@ -38,6 +40,8 @@ builds:
       - darwin
     goarch:
       - amd64
+    flags:
+      - -p=1
     tags:
       - sqlite_fts5
 
@@ -55,6 +59,8 @@ builds:
       - darwin
     goarch:
       - arm64
+    flags:
+      - -p=1
     tags:
       - sqlite_fts5
 
