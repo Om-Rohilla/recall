@@ -24,9 +24,9 @@ func RenderDigest(d DigestData) string {
 	var b strings.Builder
 
 	// Header
-	b.WriteString(TitleStyle.Render("  📊 Weekly Digest"))
+	b.WriteString(TitleStyle.Render("📊 Weekly Digest"))
 	b.WriteString("\n")
-	b.WriteString(MetadataStyle.Render(fmt.Sprintf("  Last %d days | %d total commands | %d unique",
+	b.WriteString(MetadataStyle.Render(fmt.Sprintf("Last %d days | %d total commands | %d unique",
 		d.PeriodDays, d.TotalCommands, d.UniqueCommands)))
 	b.WriteString("\n\n")
 
@@ -124,12 +124,12 @@ func RenderDigest(d DigestData) string {
 		}))
 	}
 
-	return b.String()
+	return PanelStyle.Render(b.String())
 }
 
 func renderDigestSection(title string, content func() string) string {
 	var b strings.Builder
-	b.WriteString(StatsHeaderStyle.Render("  " + title))
+	b.WriteString(StatsHeaderStyle.Render(title))
 	b.WriteString("\n")
 	b.WriteString(content())
 	b.WriteString("\n\n")

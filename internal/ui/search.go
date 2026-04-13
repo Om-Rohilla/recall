@@ -173,10 +173,9 @@ func (m SearchModel) View() string {
 
 	var b strings.Builder
 
+	b.WriteString(TitleStyle.Render("Recall Search") + "\n")
 	b.WriteString("\n")
-	b.WriteString("  " + TitleStyle.Render("Recall Search") + "\n")
-	b.WriteString("\n")
-	b.WriteString("  " + SearchInputStyle.Render(m.input.View()) + "\n")
+	b.WriteString(SearchInputStyle.Render(m.input.View()) + "\n")
 	b.WriteString("\n")
 
 	if len(m.results) == 0 {
@@ -234,10 +233,17 @@ func (m SearchModel) View() string {
 		}
 	}
 
+	// Action bar
 	b.WriteString("\n")
-	b.WriteString("  " + HintStyle.Render("[Enter] Select  [Tab] Next  [↑/↓] Navigate  [Esc] Quit") + "\n")
+	actionBar := HintStyle.Render("[Enter]") + " Select  " +
+		HintStyle.Render("[Tab]") + " Next  " +
+		HintStyle.Render("[↑/↓]") + " Navigate  " +
+		HintStyle.Render("[Esc]") + " Quit"
 
-	return b.String()
+	b.WriteString(DimStyle.Render(strings.Repeat("─", m.width-8)) + "\n")
+	b.WriteString(actionBar + "\n")
+
+	return PanelStyle.Render(b.String())
 }
 
 func (m SearchModel) Selected() *vault.SearchResult {
