@@ -1,0 +1,134 @@
+version: 2
+
+project_name: recall
+
+before:
+  hooks:
+    - go mod tidy
+    # Required for go-sqlcipher to avoid memcpy GLIBC_2.14 errors on old systems
+    # But usually go build handles it.
+
+builds:
+  # Linux AMD64 (Native GCC can be used, but Zig makes it robust)
+  - id: linux-amd64
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-linux-musl
+      - CXX=zig c++ -target x86_64-linux-musl
+    goos:
+      - linux
+    goarch:
+      - amd64
+    tags:
+      - sqlite_fts5
+
+  # Linux ARM64
+  - id: linux-arm64
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target aarch64-linux-musl
+      - CXX=zig c++ -target aarch64-linux-musl
+    goos:
+      - linux
+    goarch:
+      - arm64
+    tags:
+      - sqlite_fts5
+
+  # macOS AMD64
+  - id: darwin-amd64
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-macos
+      - CXX=zig c++ -target x86_64-macos
+    goos:
+      - darwin
+    goarch:
+      - amd64
+    tags:
+      - sqlite_fts5
+
+  # macOS ARM64 (Apple Silicon)
+  - id: darwin-arm64
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target aarch64-macos
+      - CXX=zig c++ -target aarch64-macos
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    tags:
+      - sqlite_fts5
+
+  # Windows AMD64
+  - id: windows-amd64
+    main: .
+    binary: recall
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-windows-gnu
+      - CXX=zig c++ -target x86_64-windows-gnu
+    goos:
+      - windows
+    goarch:
+      - amd64
+    tags:
+      - sqlite_fts5
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+brews:
+  - name: recall
+    repository:
+      owner: Om-Rohilla
+      name: homebrew-tap
+    
+    # Needs to go into the Formula directory
+    directory: Formula
+    
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    
+    homepage: "https://github.com/Om-Rohilla/recall"
+    description: "Command Intelligence Engine - your terminal has perfect memory"
+    license: "MIT"
+    
+    # We skip dependencies to keep the formula simple, but you might want to add them here if needed
+    test: |
+      system "#{bin}/recall", "--help"
