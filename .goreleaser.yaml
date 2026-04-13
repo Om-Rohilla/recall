@@ -9,14 +9,14 @@ before:
     # But usually go build handles it.
 
 builds:
-  # Linux AMD64 (Native GCC can be used, but Zig makes it robust)
+  # Linux AMD64
   - id: linux-amd64
     main: .
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target x86_64-linux-musl
-      - CXX=zig c++ -target x86_64-linux-musl
+      - CC=gcc
+      - CXX=g++
     goos:
       - linux
     goarch:
@@ -30,8 +30,8 @@ builds:
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target aarch64-linux-musl
-      - CXX=zig c++ -target aarch64-linux-musl
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
     goos:
       - linux
     goarch:
@@ -75,8 +75,8 @@ builds:
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target x86_64-windows-gnu
-      - CXX=zig c++ -target x86_64-windows-gnu
+      - CC=x86_64-w64-mingw32-gcc
+      - CXX=x86_64-w64-mingw32-g++
     goos:
       - windows
     goarch:
