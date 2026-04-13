@@ -32,6 +32,8 @@ builds:
       - CGO_ENABLED=1
       - CC=zig cc -target x86_64-macos
       - CXX=zig c++ -target x86_64-macos
+      - ZIG_LOCAL_CACHE_DIR=/tmp/zig-local-cache
+      - ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache
     goos:
       - darwin
     goarch:
@@ -47,6 +49,8 @@ builds:
       - CGO_ENABLED=1
       - CC=zig cc -target aarch64-macos
       - CXX=zig c++ -target aarch64-macos
+      - ZIG_LOCAL_CACHE_DIR=/tmp/zig-local-cache
+      - ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache
     goos:
       - darwin
     goarch:
