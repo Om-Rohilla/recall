@@ -21,10 +21,12 @@ builds:
       - linux
     goarch:
       - amd64
-    flags:
-      - -p=1
     tags:
       - sqlite_fts5
+    ldflags:
+      - "-s -w"
+      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
+      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
 
   # macOS AMD64
   - id: darwin-amd64
@@ -34,16 +36,15 @@ builds:
       - CGO_ENABLED=1
       - CC=zig cc -target x86_64-macos
       - CXX=zig c++ -target x86_64-macos
-      - ZIG_LOCAL_CACHE_DIR=/tmp/zig-local-cache
-      - ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache
     goos:
       - darwin
     goarch:
       - amd64
-    flags:
-      - -p=1
     tags:
       - sqlite_fts5
+    ldflags:
+      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
+      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
 
   # macOS ARM64 (Apple Silicon)
   - id: darwin-arm64
@@ -53,16 +54,15 @@ builds:
       - CGO_ENABLED=1
       - CC=zig cc -target aarch64-macos
       - CXX=zig c++ -target aarch64-macos
-      - ZIG_LOCAL_CACHE_DIR=/tmp/zig-local-cache
-      - ZIG_GLOBAL_CACHE_DIR=/tmp/zig-global-cache
     goos:
       - darwin
     goarch:
       - arm64
-    flags:
-      - -p=1
     tags:
       - sqlite_fts5
+    ldflags:
+      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
+      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
 
 archives:
   - format: tar.gz
