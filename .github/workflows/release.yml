@@ -41,6 +41,10 @@ jobs:
         with:
           version: 0.13.0
 
+      # Unlock the Go module cache so Zig can write lock files during concurrent cross-compilation
+      - name: Unlock Go Module Cache for Zig
+        run: chmod -R a+w ~/go/pkg/mod || true
+
       # Install cosign for keyless binary signing via Sigstore.
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

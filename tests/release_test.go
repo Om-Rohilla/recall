@@ -41,12 +41,12 @@ func TestVersionAndBuildDateVarsExist(t *testing.T) {
 }
 
 func TestGoReleaserConfigExists(t *testing.T) {
-	info, err := os.Stat("../.goreleaser.yml")
+	info, err := os.Stat("../.goreleaser.yaml")
 	if err != nil {
-		t.Fatalf(".goreleaser.yml not found: %v", err)
+		t.Fatalf(".goreleaser.yaml not found: %v", err)
 	}
 	if info.Size() == 0 {
-		t.Fatal(".goreleaser.yml is empty")
+		t.Fatal(".goreleaser.yaml is empty")
 	}
 }
 
