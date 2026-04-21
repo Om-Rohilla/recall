@@ -11,6 +11,7 @@ permissions:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 1: Build Linux binary on a native Ubuntu runner
+# Uses --split so GoReleaser writes metadata for goreleaser continue --merge
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
   build-linux:
@@ -32,7 +33,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: build --clean --id linux-amd64
+          args: release --clean --split --skip=publish,announce,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -44,6 +45,7 @@ jobs:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2: Build macOS binaries on a native macOS runner
+# Uses --split so GoReleaser writes metadata for goreleaser continue --merge
 # ─────────────────────────────────────────────────────────────────────────────
   build-macos:
     name: Build (macOS)
@@ -62,7 +64,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: build --clean --id darwin-amd64 --id darwin-arm64
+          args: release --clean --split --skip=publish,announce,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -73,7 +75,9 @@ jobs:
           retention-days: 1
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 3: Merge artifacts and publish GitHub Release + Homebrew formula
+# Job 3: Merge all platform artifacts and publish the GitHub Release
+# goreleaser continue --merge reads the metadata from all dist/ folders and
+# creates archives, checksums, GitHub Release and the Homebrew formula.
 # ─────────────────────────────────────────────────────────────────────────────
   release:
     name: Release
@@ -99,10 +103,13 @@ jobs:
           name: dist-macos
           path: dist/
 
+      - name: Install CGO dependencies (needed for goreleaser continue)
+        run: sudo apt-get update && sudo apt-get install -yq --no-install-recommends gcc libsqlite3-dev
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean --skip=build
+          args: continue --merge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
