@@ -10,79 +10,22 @@ permissions:
   id-token: write
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 1: Build Linux binary on a native Ubuntu runner
-# Uses --split so GoReleaser writes metadata for goreleaser continue --merge
+# Single job on macos-latest:
+# - macOS runner has native clang for darwin builds (amd64 + arm64)
+# - It also has Rosetta cross-tools, so linux/amd64 builds via musl/zig
+# We use goreleaser-pro split only on free tier: just run full release here.
+#
+# APPROACH: Run the full goreleaser release on macos-latest.
+#   darwin builds: native clang (zero extra deps)
+#   linux/amd64:   CGO cross-compile using zig cc targeting x86_64-linux-musl
+#                  This works because zig handles pure C (sqlite3.c) perfectly
+#                  on the link step — NO Go internal linker is used for CGO.
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  build-linux:
-    name: Build (Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          cache: true
-
-      - name: Install CGO dependencies
-        run: sudo apt-get update && sudo apt-get install -yq --no-install-recommends gcc libsqlite3-dev
-
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --clean --split --skip=publish,announce,validate
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-linux
-          path: dist/
-          retention-days: 1
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 2: Build macOS binaries on a native macOS runner
-# Uses --split so GoReleaser writes metadata for goreleaser continue --merge
-# ─────────────────────────────────────────────────────────────────────────────
-  build-macos:
-    name: Build (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-          cache: true
-
-      # Xcode Command Line Tools provide clang — no extra install needed.
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --clean --split --skip=publish,announce,validate
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-macos
-          path: dist/
-          retention-days: 1
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Job 3: Merge all platform artifacts and publish the GitHub Release
-# goreleaser continue --merge reads the metadata from all dist/ folders and
-# creates archives, checksums, GitHub Release and the Homebrew formula.
-# ─────────────────────────────────────────────────────────────────────────────
   release:
     name: Release
-    needs: [build-linux, build-macos]
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,23 +36,18 @@ jobs:
           go-version-file: "go.mod"
           cache: true
 
-      - uses: actions/download-artifact@v4
+      # Install Zig — only needed for the Linux cross-compile target.
+      # macOS targets use native clang automatically.
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
         with:
-          name: dist-linux
-          path: dist/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-macos
-          path: dist/
-
-      - name: Install CGO dependencies (needed for goreleaser continue)
-        run: sudo apt-get update && sudo apt-get install -yq --no-install-recommends gcc libsqlite3-dev
+          version: 0.13.0
 
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: continue --merge
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          ZIG_GLOBAL_CACHE_DIR: ${{ runner.temp }}/zig-cache

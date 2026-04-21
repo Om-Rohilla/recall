@@ -7,14 +7,15 @@ before:
     - go mod tidy
 
 builds:
-  # Linux AMD64 — compiled natively on ubuntu-latest runner
+  # Linux AMD64 — cross-compiled from macOS runner using zig cc
+  # zig handles the C compilation (sqlite3.c) cleanly. Works from any host OS.
   - id: linux-amd64
     main: .
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=gcc
-      - CXX=g++
+      - CC=zig cc -target x86_64-linux-musl
+      - CXX=zig c++ -target x86_64-linux-musl
     goos:
       - linux
     goarch:
@@ -26,7 +27,7 @@ builds:
       - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
       - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
-  # macOS AMD64 (Intel) — compiled natively on macos-latest runner
+  # macOS AMD64 (Intel) — native clang on macos-latest runner
   - id: darwin-amd64
     main: .
     binary: recall
@@ -42,7 +43,7 @@ builds:
       - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
       - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
-  # macOS ARM64 (Apple Silicon) — compiled natively on macos-latest runner
+  # macOS ARM64 (Apple Silicon) — native clang on macos-latest runner
   - id: darwin-arm64
     main: .
     binary: recall
@@ -98,8 +99,6 @@ release:
     owner: Om-Rohilla
     name: recall
   name_template: "v{{.Version}}"
-  draft: false
-  prerelease: auto
 
 brews:
   - name: recall
