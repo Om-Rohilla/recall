@@ -5,57 +5,104 @@ on:
     tags:
       - "v*"
 
-# Required for Sigstore keyless (OIDC) signing — id-token:write and
-# attestations:write allow cosign to obtain an OIDC token from GitHub Actions.
 permissions:
   contents: write
   id-token: write
-  attestations: write
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 1: Build Linux binary on a native Ubuntu runner
+# ─────────────────────────────────────────────────────────────────────────────
 jobs:
-  release:
-    name: Release
+  build-linux:
+    name: Build (Linux)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
           cache: true
 
-      # Install libsqlite3-dev and gcc as fallback for CGO.
-      - name: Install CGO build dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: sudo apt-get update && sudo apt-get install -yq --no-install-recommends gcc libsqlite3-dev gcc-aarch64-linux-gnu gcc-mingw-w64
+      - name: Install CGO dependencies
+        run: sudo apt-get update && sudo apt-get install -yq --no-install-recommends gcc libsqlite3-dev
 
-      # Install Zig for pristine magical CGO Cross-Compilation.
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
+      - uses: goreleaser/goreleaser-action@v6
         with:
-          version: 0.13.0
-
-      # Unlock the Go module cache so Zig can write lock files during concurrent cross-compilation
-      - name: Unlock Go Module Cache for Zig
-        run: chmod -R a+w ~/go/pkg/mod || true
-
-      # Install cosign for keyless binary signing via Sigstore.
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean -p 1
+          version: "~> v2"
+          args: build --clean --id linux-amd64
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-          # cosign keyless signing uses OIDC — no private key required.
-          COSIGN_EXPERIMENTAL: "1"
-          ZIG_GLOBAL_CACHE_DIR: ${{ runner.temp }}/zig-cache
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/
+          retention-days: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 2: Build macOS binaries on a native macOS runner
+# ─────────────────────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      # Xcode Command Line Tools provide clang — no extra install needed.
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: build --clean --id darwin-amd64 --id darwin-arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          path: dist/
+          retention-days: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 3: Merge artifacts and publish GitHub Release + Homebrew formula
+# ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Release
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-macos
+          path: dist/
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean --skip=build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}

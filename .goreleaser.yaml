@@ -5,11 +5,9 @@ project_name: recall
 before:
   hooks:
     - go mod tidy
-    # Required for go-sqlcipher to avoid memcpy GLIBC_2.14 errors on old systems
-    # But usually go build handles it.
 
 builds:
-  # Linux AMD64
+  # Linux AMD64 — compiled natively on ubuntu-latest runner
   - id: linux-amd64
     main: .
     binary: recall
@@ -24,18 +22,16 @@ builds:
     tags:
       - sqlite_fts5
     ldflags:
-      - "-s -w"
-      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
-      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
+      - -s -w
+      - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
+      - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
-  # macOS AMD64
+  # macOS AMD64 (Intel) — compiled natively on macos-latest runner
   - id: darwin-amd64
     main: .
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target x86_64-macos
-      - CXX=zig c++ -target x86_64-macos
     goos:
       - darwin
     goarch:
@@ -43,17 +39,15 @@ builds:
     tags:
       - sqlite_fts5
     ldflags:
-      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
-      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
+      - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
+      - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
-  # macOS ARM64 (Apple Silicon)
+  # macOS ARM64 (Apple Silicon) — compiled natively on macos-latest runner
   - id: darwin-arm64
     main: .
     binary: recall
     env:
       - CGO_ENABLED=1
-      - CC=zig cc -target aarch64-macos
-      - CXX=zig c++ -target aarch64-macos
     goos:
       - darwin
     goarch:
@@ -61,8 +55,8 @@ builds:
     tags:
       - sqlite_fts5
     ldflags:
-      - "-X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}"
-      - "-X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}"
+      - -X github.com/Om-Rohilla/recall/cmd.Version={{.Version}}
+      - -X github.com/Om-Rohilla/recall/cmd.BuildDate={{.Date}}
 
 archives:
   - format: tar.gz
@@ -73,12 +67,20 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "arm64" }}arm64
       {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - src: scripts/hooks/*
+        dst: hooks
+      - src: data/knowledge.json
+        dst: data
 
 checksum:
   name_template: "checksums.txt"
+  algorithm: sha256
 
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-dev"
 
 changelog:
   sort: asc
@@ -86,26 +88,35 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: Om-Rohilla
+    name: recall
+  name_template: "v{{.Version}}"
+  draft: false
+  prerelease: auto
 
 brews:
   - name: recall
     repository:
       owner: Om-Rohilla
       name: homebrew-tap
-    
-    # Needs to go into the Formula directory
+      token: "{{ .Env.GH_PAT }}"
     directory: Formula
-    
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    
+    commit_msg_template: "chore: bump recall to {{ .Tag }}"
     homepage: "https://github.com/Om-Rohilla/recall"
-    description: "Command Intelligence Engine - your terminal has perfect memory"
+    description: "100% offline command intelligence for your terminal — eliminate Command Amnesia"
     license: "MIT"
-    
-    # We skip dependencies to keep the formula simple, but you might want to add them here if needed
+    skip_upload: auto
+    install: |
+      bin.install "recall"
     test: |
       system "#{bin}/recall", "--help"
