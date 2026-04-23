@@ -21,9 +21,12 @@ const (
 	NonceSize = 12
 	KeySize   = 32 // AES-256
 
-	// Argon2id parameters (OWASP recommended)
-	argon2Time    = 3
-	argon2Memory  = 64 * 1024 // 64 MB
+	// Argon2id parameters.
+	// Reference: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+	// OWASP 2024 minimum: time=3, memory=64MB. We use time=4 for additional
+	// resistance against GPU-based attacks at a modest CPU cost.
+	argon2Time    = 4          // was 3 — bumped for OWASP 2024 compliance
+	argon2Memory  = 64 * 1024  // 64 MB
 	argon2Threads = 4
 
 	// Export file format magic bytes

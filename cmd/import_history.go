@@ -28,7 +28,8 @@ This gives Recall a head start with your personal command patterns.
 
 Supports:
   - Zsh history (with extended history timestamps)
-  - Bash history`,
+  - Bash history
+  - Fish history (YAML format)`,
 	RunE: runImportHistory,
 }
 
@@ -78,8 +79,14 @@ func runImportHistory(cmd *cobra.Command, args []string) error {
 		lines = lines[len(lines)-importLimit:]
 	}
 
-	// Parse lines into commands, joining multiline entries
-	commands := parseHistoryLines(lines, cfg)
+	// Parse lines into commands, joining multiline entries.
+	// For Fish shell, use the YAML-format parser.
+	var commands []vault.Command
+	if shellInfo, err := shell.Detect(); err == nil && shellInfo.Shell == shell.Fish {
+		commands = parseFishHistory(lines, cfg)
+	} else {
+		commands = parseHistoryLines(lines, cfg)
+	}
 
 	fmt.Printf("   Parsed %d unique commands (after filtering)\n", len(commands))
 
@@ -161,4 +168,51 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// parseFishHistory parses Fish shell's YAML-based history format:
+//
+//	- cmd: git status
+//	  when: 1609459200
+//	- cmd: docker ps
+//	  when: 1609459260
+func parseFishHistory(lines []string, cfg *config.Config) []vault.Command {
+	seen := make(map[string]bool)
+	var commands []vault.Command
+	var currentCmd string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- cmd:") {
+			// Flush previous command before starting a new one
+			if currentCmd != "" {
+				if cmd := capture.ProcessHistoryLine(currentCmd, cfg); cmd != nil && !seen[cmd.Raw] {
+					seen[cmd.Raw] = true
+					commands = append(commands, *cmd)
+				}
+				currentCmd = ""
+			}
+			currentCmd = strings.TrimSpace(strings.TrimPrefix(line, "- cmd:"))
+		} else if strings.HasPrefix(line, "cmd:") {
+			currentCmd = strings.TrimSpace(strings.TrimPrefix(line, "cmd:"))
+		} else if strings.HasPrefix(line, "when:") || line == "" {
+			// Timestamp line or blank line signals end of current entry
+			if currentCmd != "" {
+				if cmd := capture.ProcessHistoryLine(currentCmd, cfg); cmd != nil && !seen[cmd.Raw] {
+					seen[cmd.Raw] = true
+					commands = append(commands, *cmd)
+				}
+				currentCmd = ""
+			}
+		}
+	}
+
+	// Flush any trailing command that wasn't followed by a "when:" line
+	if currentCmd != "" {
+		if cmd := capture.ProcessHistoryLine(currentCmd, cfg); cmd != nil && !seen[cmd.Raw] {
+			commands = append(commands, *cmd)
+		}
+	}
+
+	return commands
 }

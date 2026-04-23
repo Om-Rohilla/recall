@@ -2,6 +2,15 @@
 # Recall shell hook for Bash
 # Captures commands after execution with minimal overhead
 # This file is sourced via: eval "$(recall hook bash)"
+#
+# NOTE: Commands excluded by HISTCONTROL may not be captured since Recall
+# reads from 'history 1'. Specifically:
+#   - HISTCONTROL=ignorespace: commands with a leading space are skipped
+#   - HISTCONTROL=ignoredups:  exact duplicate commands are skipped
+# To capture all commands, add to your .bashrc:
+#   export HISTCONTROL=
+# Recall's own secret filter (see 'recall config show') prevents sensitive
+# commands from being stored regardless of HISTCONTROL.
 
 __recall_preexec() {
     [ -n "$COMP_LINE" ] && return

@@ -18,9 +18,11 @@ type Config struct {
 	Hotkeys  HotkeysConfig  `toml:"hotkeys"`
 }
 
+// VaultConfig holds vault storage settings.
+// Note: encryption is always on — the vault uses AES-256-GCM via SQLCipher
+// and cannot be disabled. There is no "encrypt" config field.
 type VaultConfig struct {
-	Path    string `toml:"path"`
-	Encrypt bool   `toml:"encrypt"`
+	Path string `toml:"path"`
 }
 
 type CaptureConfig struct {

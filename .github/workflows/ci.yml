@@ -33,11 +33,26 @@ jobs:
       - name: Test
         run: go test -tags sqlite_fts5 ./... -count=1 -race -timeout 300s
 
-      - name: Build
-        run: CGO_ENABLED=1 go build -tags sqlite_fts5 -o /dev/null .
+      - name: Build Binary
+        run: CGO_ENABLED=1 go build -tags sqlite_fts5 -ldflags "-X main.version=ci-test" -o recall_test_bin .
+
+      - name: Smoke Test — version flag
+        run: |
+          ./recall_test_bin --version
+          ./recall_test_bin --version | grep -E "v?[0-9]+\.[0-9]+"
+
+      - name: Smoke Test — help flag
+        run: ./recall_test_bin --help
+
+      - name: Smoke Test — plugin install requires --accept-risk
+        run: |
+          ./recall_test_bin plugin install /dev/null 2>&1 | grep -i "accept-risk"
+
+      - name: Smoke Test — plugin install rejects non-WASM
+        run: |
+          ./recall_test_bin plugin install /dev/null --accept-risk 2>&1 | grep -i "invalid WASM"
 
       - name: Staticcheck
-        continue-on-error: true
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           staticcheck -tags sqlite_fts5 ./...

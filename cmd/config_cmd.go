@@ -23,7 +23,7 @@ Usage:
   recall config path            Show config file path
 
 Supported keys:
-  vault.path, vault.encrypt
+  vault.path
   capture.enabled, capture.noise_filter
   capture.secret_patterns, capture.exclude_commands
   search.top_results, search.min_confidence
@@ -88,7 +88,7 @@ func showConfig() error {
 
 	lines = append(lines, ui.StatsHeaderStyle.Render("  [vault]"))
 	lines = append(lines, configLine("vault.path", cfg.Vault.Path))
-	lines = append(lines, configLine("vault.encrypt", strconv.FormatBool(cfg.Vault.Encrypt)))
+	lines = append(lines, configLine("encryption", "always on (AES-256-GCM via SQLCipher)"))
 	lines = append(lines, "")
 
 	lines = append(lines, ui.StatsHeaderStyle.Render("  [capture]"))
@@ -161,8 +161,6 @@ func getValueByKey(cfg *config.Config, key string) (string, error) {
 	switch key {
 	case "vault.path":
 		return cfg.Vault.Path, nil
-	case "vault.encrypt":
-		return strconv.FormatBool(cfg.Vault.Encrypt), nil
 	case "capture.enabled":
 		return strconv.FormatBool(cfg.Capture.Enabled), nil
 	case "capture.noise_filter":
@@ -193,13 +191,6 @@ func validateAndSet(cfg *config.Config, key, value string) error {
 			return fmt.Errorf("vault.path cannot be empty")
 		}
 		cfg.Vault.Path = value
-
-	case "vault.encrypt":
-		b, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("vault.encrypt must be true or false")
-		}
-		cfg.Vault.Encrypt = b
 
 	case "capture.enabled":
 		b, err := strconv.ParseBool(value)
@@ -249,7 +240,7 @@ func validateAndSet(cfg *config.Config, key, value string) error {
 		cfg.Alias.MinFrequency = n
 
 	default:
-		return fmt.Errorf("unknown config key: %s\nValid keys: vault.path, vault.encrypt, capture.enabled, capture.noise_filter, capture.secret_patterns, capture.exclude_commands, search.top_results, search.min_confidence, ui.theme, ui.hotkey, alias.min_frequency", key)
+		return fmt.Errorf("unknown config key: %s\nValid keys: vault.path, capture.enabled, capture.noise_filter, capture.secret_patterns, capture.exclude_commands, search.top_results, search.min_confidence, ui.theme, ui.hotkey, alias.min_frequency", key)
 	}
 
 	return nil

@@ -3,7 +3,10 @@ package capture
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Om-Rohilla/recall/internal/vault"
@@ -12,34 +15,44 @@ import (
 )
 
 // minCaptureIntervalMs is the minimum interval between captures (in ms).
-// Prevents flood attacks from malicious scripts.
+// Prevents flood attacks from malicious scripts or high-frequency hooks.
 const minCaptureIntervalMs = 50
 
-// checkRateLimit uses SQLite PRAGMA user_version (which resides in the DB header)
-// to throttle rapid concurrent captures without disk lockfile I/O thrashing.
-func checkRateLimit(store *vault.Store) bool {
-	var lastMs int64
-	if err := store.DB().QueryRow("PRAGMA user_version").Scan(&lastMs); err != nil {
-		return true // Fallback to allowing if query fails
+// checkRateLimit uses an exclusive flock on a dedicated rate-limit file to
+// atomically enforce the minimum capture interval across processes.
+//
+// Design note: We use an advisory flock on a dedicated file rather than the
+// SQLite PRAGMA user_version approach. The PRAGMA approach was not atomic
+// across multiple concurrent processes reading-then-writing the same integer.
+// An flock with LOCK_NB achieves the same throttle with true mutual exclusion.
+//
+// Returns true if this capture should proceed, false if throttled.
+func checkRateLimit(cfg *config.Config) bool {
+	rlPath := filepath.Join(filepath.Dir(cfg.Vault.Path), "capture.ratelimit")
+	f, err := os.OpenFile(rlPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return true // fail open — don't block capture if lockfile can't be created
 	}
+	defer f.Close()
+
+	// Non-blocking exclusive lock: if another process holds the lock, it means
+	// they're actively capturing right now. Skip this one to avoid floods.
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return false
+	}
+	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
+
+	var lastMs int64
+	fmt.Fscan(f, &lastMs)
 
 	nowMs := time.Now().UnixMilli()
-	nowTrunc := nowMs & 0x7FFFFFFF // Fit within 32-bit positive integer
-
-	var elapsed int64
-	// Handle 32-bit wraparound gracefully
-	if nowTrunc >= lastMs {
-		elapsed = nowTrunc - lastMs
-	} else {
-		elapsed = (nowTrunc + 0x80000000) - lastMs
-	}
-
-	if elapsed < minCaptureIntervalMs {
+	if nowMs-lastMs < minCaptureIntervalMs {
 		return false
 	}
 
-	// Update the PRAGMA. This is extremely fast (header write only).
-	_, _ = store.DB().Exec(fmt.Sprintf("PRAGMA user_version = %d", nowTrunc))
+	f.Truncate(0)  //nolint:errcheck
+	f.Seek(0, 0)   //nolint:errcheck
+	fmt.Fprintf(f, "%d", nowMs)
 	return true
 }
 
@@ -62,8 +75,8 @@ func ProcessCommand(store *vault.Store, data *vault.CaptureData, cfg *config.Con
 		return nil
 	}
 
-	// Rate limiting — prevent flood attacks via DB header check
-	if !checkRateLimit(store) {
+	// Rate limiting — prevent flood attacks via atomic file lock
+	if !checkRateLimit(cfg) {
 		return nil
 	}
 

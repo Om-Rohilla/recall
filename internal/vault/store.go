@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Om-Rohilla/recall/pkg/logging"
@@ -77,17 +79,42 @@ func NewStore(dbPath string) (*Store, error) {
 
 	s := &Store{db: db, path: dbPath}
 	if encKey != nil {
-		s.encKey = encKey
+		s.encKey = make([]byte, len(encKey))
+		copy(s.encKey, encKey)
+
+		// Register signal handler to zero the encryption key in memory on SIGTERM/SIGINT.
+		// This reduces the window during which a memory dump could expose the key.
+		// The key is also zeroed unconditionally in Close().
+		s.sigChan = make(chan os.Signal, 1)
+		signal.Notify(s.sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			sig, ok := <-s.sigChan
+			if !ok {
+				// Channel was closed by Close() — goroutine exits cleanly.
+				return
+			}
+			// Zero the key then re-raise the signal so the program exits
+			// with the correct exit code (128+signal on Unix).
+			for i := range s.encKey {
+				s.encKey[i] = 0
+			}
+			// Reset signal to default handler and raise it so the process
+			// exits normally rather than being caught by this handler again.
+			signal.Reset(sig)
+			syscall.Kill(syscall.Getpid(), sig.(syscall.Signal)) //nolint:errcheck
+		}()
 	}
 	return s, nil
 }
 
-func randomHex(n int) string {
+// randomHex generates n random bytes and returns them as a hex string.
+// Returns an error if the system's cryptographic random source is unavailable.
+func randomHex(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand unavailable: " + err.Error())
+		return "", fmt.Errorf("crypto/rand unavailable: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // isPlainSQLite returns true if the file at path exists and begins with the
@@ -113,6 +140,18 @@ func (s *Store) Close() error {
 	log := logging.Get()
 	log.Debug("closing vault", "path", s.path, "encrypted", s.encKey != nil)
 
+	// Zero the encryption key in memory to reduce exposure window.
+	for i := range s.encKey {
+		s.encKey[i] = 0
+	}
+
+	// Deregister signal handler so it no longer holds a reference to this Store.
+	if s.sigChan != nil {
+		signal.Stop(s.sigChan)
+		close(s.sigChan)
+		s.sigChan = nil
+	}
+
 	// Automated DB Janitor: Run PRAGMA optimize before closing to maintain query plan efficiency
 	if _, err := s.db.Exec("PRAGMA optimize;"); err != nil {
 		log.Debug("failed to run pragma optimize", "error", err)
@@ -121,6 +160,14 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// secureDelete attempts to overwrite the file with random data before removal.
+//
+// LIMITATION: On copy-on-write filesystems (btrfs, APFS, ZFS) and SSDs with
+// wear-leveling, this does NOT guarantee the data is unrecoverable at the
+// hardware level. Each overwrite may create a new block rather than updating
+// the existing physical location. The OS keyring is the preferred key storage
+// precisely because it avoids persistent sensitive file writes. This function
+// is called only during the one-time migration of legacy vault.key files.
 func secureDelete(path string) {
 	log := logging.Get()
 	info, err := os.Stat(path)
@@ -128,29 +175,47 @@ func secureDelete(path string) {
 		return
 	}
 	size := info.Size()
-	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
-		zeros := make([]byte, 4096)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_SYNC, 0)
+	if err != nil {
+		log.Warn("secure delete: cannot open file for overwrite", "path", path, "error", err)
+		os.Remove(path) // still attempt removal even if we can't overwrite
+		return
+	}
+
+	// Three-pass overwrite: zeros, ones, random — maximises effectiveness on
+	// spinning disks. Note the CoW limitation above.
+	passes := []func([]byte){
+		func(b []byte) { /* zeros — already zero-initialized */ },
+		func(b []byte) {
+			for i := range b {
+				b[i] = 0xFF
+			}
+		},
+		func(b []byte) { _, _ = rand.Read(b) },
+	}
+	buf := make([]byte, 4096)
+	for _, fill := range passes {
+		for i := range buf {
+			buf[i] = 0
+		}
+		fill(buf)
+		f.Seek(0, 0) //nolint:errcheck
 		for written := int64(0); written < size; {
 			n := size - written
-			if n > int64(len(zeros)) {
-				n = int64(len(zeros))
+			if n > int64(len(buf)) {
+				n = int64(len(buf))
 			}
-			w, err := f.Write(zeros[:n])
+			w, err := f.Write(buf[:n])
 			if err != nil {
-				log.Warn("secure delete write failed", "path", path, "error", err)
 				break
 			}
 			written += int64(w)
 		}
-		if err := f.Sync(); err != nil {
-			log.Warn("secure delete sync failed", "path", path, "error", err)
-		}
-		f.Close()
-	} else {
-		log.Warn("secure delete open failed", "path", path, "error", err)
+		f.Sync() //nolint:errcheck
 	}
+	f.Close()
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		log.Warn("secure delete remove failed", "path", path, "error", err)
+		log.Warn("secure delete: remove failed", "path", path, "error", err)
 	}
 }
 
@@ -559,9 +624,17 @@ func (s *Store) GetMaxFrequency() (int, error) {
 	return maxFreq, nil
 }
 
-// sanitizeFTSQuery ensures a query string is safe for FTS5.
-// All user terms are quoted with double quotes to prevent FTS5 operator
-// injection (OR, AND, NOT in user input are treated as literals).
+// sanitizeFTSQuery prepares a user-provided query string for safe use in an
+// FTS5 MATCH expression. All user terms are wrapped in double quotes to prevent
+// injection of FTS5 operators (AND, OR, NOT, NEAR, *).
+//
+// TRUST CONTRACT: This function preserves bare "OR" tokens ONLY when called
+// from BuildFTSQuery, which constructs internal OR-joined multi-term queries.
+// Raw user input must NEVER contain bare OR — sanitizeFTSQuery will pass it
+// through as a valid FTS5 operator. All user-facing search entry points must
+// call sanitizeFTSQuery on the raw user string BEFORE any BuildFTSQuery
+// expansion.
+//
 // Pre-built queries from BuildFTSQuery use OR operators between quoted terms.
 func sanitizeFTSQuery(query string) string {
 	query = strings.TrimSpace(query)

@@ -85,6 +85,8 @@ var builtinSecretPatterns = []string{
 	"sentry_dsn=", "sentry.dsn=",
 	// Vercel (belt+suspenders alongside regex)
 	"vercel_token=",
+	// AWS Access Key IDs (various IAM entity types — string patterns)
+	"akia", "aipa", "asia", "aroa", "agpa", "anpa", "anva", "apka",
 	// 1Password CLI output patterns
 	"op://",
 	// Doppler service/personal/staging tokens
@@ -97,10 +99,18 @@ var builtinSecretPatterns = []string{
 var builtinSecretRegexes = []*regexp.Regexp{
 	// Environment variable export with inline value (export KEY=value or KEY=value cmd)
 	regexp.MustCompile(`(?i)(export\s+)?[a-z_]*(?:secret|token|password|key|credential|auth)[a-z_]*\s*=\s*\S+`),
-	// Long hex strings that look like tokens (32+ chars)
-	regexp.MustCompile(`[0-9a-f]{32,}`),
+	// Long hex tokens — minimum 40 chars with word boundaries to avoid matching short hashes.
+	// 40 chars is the length of a SHA-1 git commit hash, so this targets longer secrets only.
+	// Git SHAs passed as command arguments (e.g. git show <sha>) are NOT filtered.
+	regexp.MustCompile(`(?i)\b[0-9a-f]{40,}\b`),
 	// Connection strings with embedded passwords (user:pass@host)
 	regexp.MustCompile(`://[^/\s]+:[^/\s]+@[^/\s]+`),
+	// Telegram bot token: <digits>:<Base64url 35 chars>
+	regexp.MustCompile(`\b\d{6,12}:AA[A-Za-z0-9_-]{33}\b`),
+	// Discord bot token format (MFA and regular)
+	regexp.MustCompile(`[MN][A-Za-z0-9]{23}\.[A-Za-z0-9]{6}\.[A-Za-z0-9_-]{38}`),
+	// AWS IAM access key IDs (AKIA*, AIPA*, ASIA*, AROA*, etc. + 16 uppercase alphanum)
+	regexp.MustCompile(`\b(AKIA|AIPA|ASIA|AROA|AGPA|ANPA|ANVA|APKA)[A-Z0-9]{16}\b`),
 }
 
 // builtinCommandPatterns catch dangerous auth-passing CLI patterns.

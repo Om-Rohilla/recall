@@ -14,7 +14,7 @@
     <a href="https://github.com/Om-Rohilla/recall/actions/workflows/release.yml"><img alt="Release" src="https://github.com/Om-Rohilla/recall/actions/workflows/release.yml/badge.svg"></a>
     <img alt="Version" src="https://img.shields.io/github/v/release/Om-Rohilla/recall?color=success">
     <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg">
-    <img alt="Go Version" src="https://img.shields.io/badge/go-1.25+-00ADD8.svg">
+    <img alt="Go Version" src="https://img.shields.io/badge/go-1.24+-00ADD8.svg">
     <img alt="Platform" src="https://img.shields.io/badge/platform-linux%20%7C%20macos-lightgrey.svg">
     <img alt="100% Offline" src="https://img.shields.io/badge/network-100%25%20offline-success.svg">
   </p>
@@ -93,6 +93,11 @@ brew install recall
 ```bash
 curl -sSf https://raw.githubusercontent.com/Om-Rohilla/recall/main/scripts/install.sh | sh
 ```
+
+> **macOS users:** Binary is not yet notarized (planned for v1.1). The installer automatically removes the Gatekeeper quarantine flag. If you install manually, run:
+> ```sh
+> xattr -d com.apple.quarantine /usr/local/bin/recall
+> ```
 
 ### Download Binary
 
@@ -186,6 +191,8 @@ $ recall vault   # Opens interactive TUI browser
 ```
 
 Browse, filter, and manage your history by category, project, frequency, or recency.
+
+> **Backup tip:** The vault is a single SQLite file (default `~/.local/share/recall/vault.db`). In WAL mode, a complete backup requires copying both `vault.db` **and** any `vault.db-wal` file while Recall is not running. Use `recall export` for a safe, encrypted backup.
 
 ### 🧠 Explain Mode — Understand Any Command
 
@@ -337,7 +344,7 @@ Query: "find big files"
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Go 1.25+ |
+| Language | Go 1.24+ |
 | CLI framework | Cobra |
 | TUI | Bubbletea + Lipgloss |
 | Storage | SQLite + FTS5 (via go-sqlcipher, AES-256) |
@@ -453,7 +460,7 @@ CGO_ENABLED=1 go build -tags sqlite_fts5 -o recall .
 
 ### Development Requirements
 
-- Go 1.25+
+- Go 1.24+
 - GCC (for CGO / SQLCipher)
 - `libsqlite3-dev` (Linux only)
 

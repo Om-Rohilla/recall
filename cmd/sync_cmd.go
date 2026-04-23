@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/Om-Rohilla/recall/internal/ui"
 	"github.com/Om-Rohilla/recall/internal/vault"
@@ -16,24 +19,48 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// syncHTTPClient is a shared HTTP client with strict timeouts.
+// Using http.DefaultClient is prohibited — it has no timeout and can hang forever.
+var syncHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		DisableCompression:    false,
+	},
+}
+
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "E2E Cloud Sync (Ghost Mode) via GitHub Gists",
 	RunE:  runSync,
 }
 
+var syncTokenFile string
+
 func init() {
+	syncCmd.Flags().StringVar(&syncTokenFile, "token-file", "",
+		"read GitHub token from file (more secure than env var — avoids ps aux exposure)")
 	rootCmd.AddCommand(syncCmd)
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
+	// Prefer --token-file over env var: env vars are visible in ps aux output.
 	token := os.Getenv("RECALL_GITHUB_TOKEN")
+	if syncTokenFile != "" {
+		raw, err := os.ReadFile(syncTokenFile)
+		if err != nil {
+			return fmt.Errorf("reading token file: %w", err)
+		}
+		token = strings.TrimSpace(string(raw))
+	}
 	if token == "" {
-		return fmt.Errorf("RECALL_GITHUB_TOKEN environment variable is required for Ghost Sync")
+		return fmt.Errorf("GitHub token required: set RECALL_GITHUB_TOKEN env var or use --token-file")
 	}
 
 	cfg := config.Get()
-	
+
 	// We'll sync the pending commands asynchronously
 	queueFile := filepath.Join(filepath.Dir(cfg.Vault.Path), "pending.ndjson")
 	if _, err := os.Stat(queueFile); os.IsNotExist(err) {
@@ -98,13 +125,19 @@ func createGist(token, content string) (string, error) {
 	}
 	b, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", "https://api.github.com/gists", bytes.NewReader(b))
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/gists", bytes.NewReader(b))
+	if err != nil {
+		return "", fmt.Errorf("building create gist request: %w", err)
+	}
 	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := syncHTTPClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating gist: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -113,11 +146,20 @@ func createGist(token, content string) (string, error) {
 		return "", fmt.Errorf("failed to create gist: %s", string(body))
 	}
 
-	var res struct {
-		ID string `json:"id"`
+	var gistResponse struct {
+		ID     string `json:"id"`
+		Public bool   `json:"public"`
 	}
-	json.NewDecoder(resp.Body).Decode(&res)
-	return res.ID, nil
+	if err := json.NewDecoder(resp.Body).Decode(&gistResponse); err != nil {
+		return "", fmt.Errorf("decoding gist response: %w", err)
+	}
+
+	// Security: verify the gist was created private
+	if gistResponse.Public {
+		return "", fmt.Errorf("SECURITY: created Gist is public — aborting to prevent data exposure")
+	}
+
+	return gistResponse.ID, nil
 }
 
 func updateGist(token, id, content string) error {
@@ -129,13 +171,19 @@ func updateGist(token, id, content string) error {
 	}
 	b, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("PATCH", "https://api.github.com/gists/"+id, bytes.NewReader(b))
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "PATCH", "https://api.github.com/gists/"+id, bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("building update gist request: %w", err)
+	}
 	req.Header.Set("Authorization", "token "+token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := syncHTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("updating gist: %w", err)
 	}
 	defer resp.Body.Close()
 

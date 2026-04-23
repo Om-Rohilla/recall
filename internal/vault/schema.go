@@ -3,6 +3,8 @@ package vault
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/Om-Rohilla/recall/pkg/logging"
 )
 
 const schemaVersion = 4
@@ -204,10 +206,21 @@ func initSchema(db *sql.DB) error {
 	// Dangling triggers referencing a non-existent commands_fts table will
 	// cause DELETE operations to fail with "no such table: commands_fts".
 	if _, err := db.Exec(createFTS); err == nil {
-		_, _ = db.Exec(createFTSTriggers)
+		if _, trigErr := db.Exec(createFTSTriggers); trigErr != nil {
+			// Log but don't fail — trigger creation failure means FTS index won't
+			// auto-update on inserts, but existing data and LIKE-based search still work.
+			// The user can restore full FTS by running: recall maintenance --rebuild-index
+			logging.Get().Warn("FTS5 trigger creation failed — search index will not auto-update",
+				"error", trigErr,
+				"fix", "run: recall maintenance --rebuild-index")
+		}
 	}
 	if _, err := db.Exec(createKnowledgeFTS); err == nil {
-		_, _ = db.Exec(createKnowledgeFTSTriggers)
+		if _, trigErr := db.Exec(createKnowledgeFTSTriggers); trigErr != nil {
+			logging.Get().Warn("Knowledge FTS5 trigger creation failed — knowledge search index will not auto-update",
+				"error", trigErr,
+				"fix", "run: recall maintenance --rebuild-index")
+		}
 	}
 
 	var count int

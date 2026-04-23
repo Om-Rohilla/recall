@@ -29,6 +29,18 @@ func AppendAndTryFlush(data *vault.CaptureData, cfg *config.Config) error {
 
 	queueFile := filepath.Join(filepath.Dir(cfg.Vault.Path), "pending.ndjson")
 
+	// Guard against unbounded queue growth if the background ingest process
+	// repeatedly fails to run. Drop the entry and log a warning rather than
+	// filling the user's disk. 10 MB is generous for even heavy usage.
+	const maxQueueSizeBytes = 10 * 1024 * 1024 // 10 MB
+	if info, err := os.Stat(queueFile); err == nil {
+		if info.Size() > maxQueueSizeBytes {
+			log.Warn("capture queue full — dropping command to prevent unbounded growth",
+				"queue_size", info.Size(), "limit_bytes", maxQueueSizeBytes)
+			return nil
+		}
+	}
+
 	// 1. Thread-safe atomic append (O_APPEND writes < PIPE_BUF are atomic on POSIX)
 	f, err := os.OpenFile(queueFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {

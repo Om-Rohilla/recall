@@ -20,7 +20,11 @@ var shareCmd = &cobra.Command{
 	RunE:  runShare,
 }
 
+var shareOutput string
+
 func init() {
+	shareCmd.Flags().StringVar(&shareOutput, "output", "",
+		"output path for SVG file (default: recall_share.svg in OS cache dir)")
 	rootCmd.AddCommand(shareCmd)
 }
 
@@ -57,15 +61,25 @@ func runShare(cmd *cobra.Command, args []string) error {
 	actualCmd = capture.SanitizeSecrets(actualCmd, cfg)
 
 	svg := generateSVG(title, actualCmd, footer)
-	
-	outPath := "recall_share.svg"
-	if err := os.WriteFile(outPath, []byte(svg), 0644); err != nil {
+
+	outPath := shareOutput
+	if outPath == "" {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			// Fall back to CWD if XDG cache dir is unavailable
+			cacheDir, _ = os.Getwd()
+		}
+		shareDir := filepath.Join(cacheDir, "recall")
+		_ = os.MkdirAll(shareDir, 0o700)
+		outPath = filepath.Join(shareDir, "recall_share.svg")
+	}
+
+	// 0600: SVG cards may contain command details and usernames.
+	if err := os.WriteFile(outPath, []byte(svg), 0o600); err != nil {
 		return fmt.Errorf("writing SVG: %w", err)
 	}
 
-	pwd, _ := os.Getwd()
-	fullPath := filepath.Join(pwd, outPath)
-	fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✨ Beautiful share card generated at: %s", fullPath)))
+	fmt.Println(ui.SuccessStyle.Render(fmt.Sprintf("✨ Beautiful share card generated at: %s", outPath)))
 	return nil
 }
 

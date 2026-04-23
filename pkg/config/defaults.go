@@ -41,8 +41,8 @@ func DefaultConfigPath() string {
 func DefaultConfig() *Config {
 	return &Config{
 		Vault: VaultConfig{
-			Path:    DefaultVaultPath(),
-			Encrypt: false, // Phase 5
+			Path: DefaultVaultPath(),
+			// Vault is always AES-256-GCM encrypted via SQLCipher — no Encrypt flag needed.
 		},
 		Capture: CaptureConfig{
 			Enabled:        true,

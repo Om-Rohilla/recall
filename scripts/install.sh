@@ -118,7 +118,12 @@ To skip verification explicitly (INSECURE), set RECALL_SKIP_VERIFY=1."
             fi
         fi
     else
-        info "Checksums not available — skipping verification"
+        printf '  \033[1;33m⚠\033[0m  Checksums file not found at:\n'
+        printf '       %s\n' "$CHECKSUM_URL"
+        printf '     The binary integrity CANNOT be verified.\n'
+        printf '     To abort: press Ctrl-C now.\n'
+        printf '     Continuing in 5 seconds...\n'
+        sleep 5
     fi
 
     info "Extracting..."
@@ -144,6 +149,18 @@ To skip verification explicitly (INSECURE), set RECALL_SKIP_VERIFY=1."
 
     chmod +x "${TARGET_DIR}/recall"
     ok "Installed recall ${VERSION} to ${TARGET_DIR}/recall"
+
+    # macOS: Remove Gatekeeper quarantine flag (required for unsigned binaries).
+    # Without this, macOS refuses to run the binary and displays a security dialog.
+    if [ "$OS" = "darwin" ]; then
+        if xattr -d com.apple.quarantine "${TARGET_DIR}/recall" 2>/dev/null; then
+            ok "Removed macOS quarantine flag (Gatekeeper bypass for unsigned binary)"
+        fi
+        # Register with Gatekeeper for the current user session.
+        if command -v spctl >/dev/null 2>&1; then
+            spctl --add "${TARGET_DIR}/recall" 2>/dev/null || true
+        fi
+    fi
 }
 
 # ---------------------------------------------------------------------------
