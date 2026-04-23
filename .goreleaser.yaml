@@ -114,7 +114,7 @@ brews:
     homepage: "https://github.com/Om-Rohilla/recall"
     description: "100% offline command intelligence for your terminal — eliminate Command Amnesia"
     license: "MIT"
-    skip_upload: "true"
+    skip_upload: auto
     install: |
       bin.install "recall"
     test: |
